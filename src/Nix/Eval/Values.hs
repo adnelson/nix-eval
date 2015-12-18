@@ -19,9 +19,9 @@ newtype Thunk expr val
 
 data Value expr val
   = VConstant Constant
-  | VMap (HashMap Text val)
+  | VAttrSet (HashMap Text val)
   | VList [val]
-  | VClosure (Closure expr val)
+  | VFunction Text (Closure expr val)
 
 newtype EnvironmentF e = EnvironmentF (Environment e (ValueF e))
 newtype ValueF e = ValueF (Value e (ValueF e))
