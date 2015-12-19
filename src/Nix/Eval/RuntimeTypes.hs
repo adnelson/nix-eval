@@ -4,6 +4,7 @@ module Nix.Eval.RuntimeTypes where
 import Nix.Common
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+import Nix.Eval.Constants
 
 -- | Runtime types of values.
 data RuntimeType
@@ -22,7 +23,7 @@ typeOfConstant (Int _) = RT_Int
 typeOfConstant (Bool _) = RT_Bool
 typeOfConstant Null = RT_Null
 
-typeOfValue :: Value expr val -> RuntimeType
+typeOfValue :: Value -> RuntimeType
 typeOfValue (VConstant constant) = typeOfConstant constant
 typeOfValue (VAttrSet _) = RT_AttrSet
 typeOfValue (VList _) = RT_List
