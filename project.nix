@@ -1,5 +1,5 @@
 { mkDerivation, base, classy-prelude, containers, stdenv, text
-, unordered-containers, cabal-install, data-fix
+, unordered-containers, cabal-install, data-fix, system-filepath
 }:
 mkDerivation {
   pname = "nix-eval";
@@ -7,7 +7,7 @@ mkDerivation {
   src = ./.;
   buildDepends = [
     base classy-prelude containers text unordered-containers cabal-install
-    data-fix
+    data-fix system-filepath
   ];
   license = stdenv.lib.licenses.mit;
 }

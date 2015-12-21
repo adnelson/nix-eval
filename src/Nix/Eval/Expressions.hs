@@ -3,37 +3,94 @@ module Nix.Eval.Expressions where
 
 import Nix.Common
 import Nix.Eval.Constants
-import qualified Data.Text as T
-import qualified Data.HashMap.Strict as H
 
-data BinOp
-  = BO_Plus | BO_Minus | BO_Times | BO_Concat
-  | BO_JoinSets | BO_And | BO_Or
+-- | Types of binary operations.
+data BinaryOp
+  = BO_Plus     -- ^ +
+  | BO_Minus    -- ^ -
+  | BO_Times    -- ^ *
+  | BO_Concat   -- ^ ++
+  | BO_JoinSets -- ^ //
+  | BO_And      -- ^ &&
+  | BO_Or       -- ^ ||
   deriving (Show, Eq)
 
+-- | Types of unary operations.
+data UnaryOp
+  = UO_Not -- ^ !
+  | UO_Neg -- ^ -
+  deriving (Show, Eq)
+
+-- | A simpler expression type than the full nix language expression; this
+-- type can be seen as a desugared nix expression type.
 data Expression
   = EConstant Constant
+  -- ^ Constants such as numbers etc.
   | EVar Text
+  -- ^ Variables.
   | EListLiteral [Expression]
-  | EAttrSet (HashMap Text Expression)
-  | EAttrReference Expression Text -- ^ Dots
-  | EBinop BinOp
+  -- ^ List literals.
+  | ENonRecursiveAttrs (HashMap Text Expression)
+  -- ^ Attribute set literals, not recursive.
+  | ERecursiveAttrs (HashMap Text Expression)
+  -- ^ Attribute set literals, allowing recursive references.
+  | EAttrReference Expression Text
+  -- ^ Dot-references, like `a.b`
+  | EBinaryOp Expression BinaryOp Expression
+  -- ^ A binary operation on two expressions. We of course could implement
+  -- these as curried functions.
+  | EUnaryOp UnaryOp Expression
+  -- ^ A unary operation; once again we could just use a function call.
   | ELambda Text Expression
+  -- ^ Lambda functions.
   | EApply Expression Expression
-  | ELet (HashMap Text Expression) Expression
+  -- ^ Function application.
+  | EWith Expression Expression
+  -- ^ Expresses a `with` statement, but we also use it for `let` statements.
+  -- The first expression is an expression which must evaluate to an
+  -- attribute set. All of the keys in the attribute set will be added to
+  -- the environment before evaluating the second expression.
   deriving (Show, Eq)
 
+-- | A let statement of this form:
+--
+-- > let
+-- >   x = 1;
+-- >   y = x + 2;
+-- > in z
+--
+-- Can be viewed as the following `with` statement:
+--
+-- > with rec {
+-- >   x = 1;
+-- >   y = x + 2;
+-- > }; z
+--
+-- This function will produce this transition.
+letE :: HashMap Text Expression -> Expression -> Expression
+letE = EWith . ERecursiveAttrs
+
+-- | Creates a string literal expression.
+strE :: Text -> Expression
+strE = constantE . String
+
+-- | Creates an integer literal expression.
+intE :: Int -> Expression
+intE = constantE . Int
+
+-- | Creates a boolean literal expression.
+boolE :: Bool -> Expression
+boolE = constantE . Bool
+
+-- | Turn a constant into an expression.
 constantE :: Constant -> Expression
 constantE = EConstant
 
+-- | Turn a variable name into an expression.
 varE :: Text -> Expression
 varE = EVar
 
-letE :: HashMap Text Expression -> Expression -> Expression
-letE bindings = ELet bindings
-
-str :: Text -> Expression
-str = EConstant . String
-
+-- | We'll make Expressions's string instance be variables, rather than
+-- string literal expressions.
 instance IsString Expression where
   fromString = EVar . fromString
