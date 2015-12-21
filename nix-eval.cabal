@@ -18,7 +18,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Nix.Eval.Expressions
                      , Nix.Eval.Values
-                     , Nix.Eval.LazyEval
+                     , Nix.Eval.Evaluator
   -- other-modules:
   other-extensions:    LambdaCase, OverloadedStrings, NoImplicitPrelude
   build-depends:       base >=4.8 && <4.9
