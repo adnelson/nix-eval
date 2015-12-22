@@ -21,7 +21,7 @@ library
                      , Nix.Eval.Expressions
   -- other-modules:
   other-extensions:    LambdaCase, OverloadedStrings, NoImplicitPrelude
-  build-depends:       base >=4.8 && <4.9
+  build-depends:       base >=4.8 && <5
                      , classy-prelude
                      , containers
                      , unordered-containers
@@ -31,3 +31,18 @@ library
                      , system-filepath
   hs-source-dirs:      src
   default-language:    Haskell2010
+
+Test-Suite spec
+  Type:                 exitcode-stdio-1.0
+  Default-Language:     Haskell2010
+  Hs-Source-Dirs:       src
+                      , tests
+  Ghc-Options:          -Wall
+  Main-Is:              Spec.hs
+  Build-Depends:        base
+                      , hspec
+
+
+Source-Repository head
+  Type:                 git
+  Location:             https://github.com/adnelson/nix-eval
