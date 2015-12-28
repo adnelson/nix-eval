@@ -6,7 +6,7 @@ import Nix.Common
 data Constant
   = String Text
   | Path FilePath
-  | Int Int
+  | Int Integer
   | Bool Bool
   | Null
   deriving (Show, Eq)

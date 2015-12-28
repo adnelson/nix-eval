@@ -5,6 +5,7 @@ module Nix.Common (
   module Data.HashMap.Strict,
   module Data.Fix,
   module Filesystem.Path.CurrentOS,
+  module Data.Sequence,
   pathToText
   ) where
 
@@ -17,6 +18,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as H
+import Data.Sequence (Seq)
 import Control.Monad.State.Strict (StateT, MonadState(..))
 import Data.Fix
 import Filesystem.Path.CurrentOS hiding (concat, null, (<.>), empty)
