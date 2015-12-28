@@ -5,6 +5,7 @@
 module Nix.Eval.Builtins where
 
 import Nix.Common
+import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Constants
 import Nix.Eval.Expressions
 import Nix.Eval.Values
@@ -125,12 +126,21 @@ bi_or (Result res1) (Result res2) = case res1 of
         v -> expectedBool v
     _ -> expectedBool val1
 
-interpretBinop :: BinaryOp -> BuiltinFunc2
-interpretBinop BO_Plus = bi_plus
-interpretBinop BO_And = bi_and
-interpretBinop BO_Or = bi_or
-interpretBinop BO_Minus = bi_minus
-interpretBinop BO_Times = bi_times
+-- | Builtin division function; prevents divide-by-zero
+bi_div :: BuiltinFunc2
+bi_div = lazify2 $ \v1 v2 -> case (v1, v2) of
+  (VConstant (Int _), VConstant (Int 0)) -> throwPure DivideByZero
+  (VConstant (Int i), VConstant (Int j)) -> pure $ intV (i `div` j)
+  (v, _) -> expectedInt v
+
+
+
+interpretBinop :: NBinaryOp -> BuiltinFunc2
+interpretBinop NPlus = bi_plus
+interpretBinop NAnd = bi_and
+interpretBinop NOr = bi_or
+interpretBinop NMinus = bi_minus
+interpretBinop NMult = bi_times
 interpretBinop b =
   error ("Binary operator " <> show b <> " is not implemented.")
 

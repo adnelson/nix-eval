@@ -2,25 +2,9 @@
 module Nix.Eval.Expressions where
 
 import Nix.Common
+import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Constants
 import qualified Data.HashMap.Strict as H
-
--- | Types of binary operations.
-data BinaryOp
-  = BO_Plus     -- ^ +
-  | BO_Minus    -- ^ -
-  | BO_Times    -- ^ *
-  | BO_Concat   -- ^ ++
-  | BO_JoinSets -- ^ //
-  | BO_And      -- ^ &&
-  | BO_Or       -- ^ ||
-  deriving (Show, Eq)
-
--- | Types of unary operations.
-data UnaryOp
-  = UO_Not -- ^ !
-  | UO_Neg -- ^ -
-  deriving (Show, Eq)
 
 -- | A simpler expression type than the full nix language expression; this
 -- type can be seen as a desugared nix expression type.
@@ -37,10 +21,10 @@ data Expression
   -- ^ Attribute set literals, allowing recursive references.
   | EAttrReference Expression Text
   -- ^ Dot-references, like `a.b`
-  | EBinaryOp Expression BinaryOp Expression
+  | EBinaryOp Expression NBinaryOp Expression
   -- ^ A binary operation on two expressions. We of course could implement
   -- these as curried functions.
-  | EUnaryOp UnaryOp Expression
+  | EUnaryOp NUnaryOp Expression
   -- ^ A unary operation; once again we could just use a function call.
   | ELambda Text Expression
   -- ^ Lambda functions.
@@ -102,10 +86,10 @@ attrsE = ENonRecursiveAttrs . H.fromList
 infixl 8 !.
 
 -- | Function application expression.
-($$) :: Expression -> Expression -> Expression
-e $$ e' = EApply e e'
+(@@) :: Expression -> Expression -> Expression
+e @@ e' = EApply e e'
 
-infixr 0 $$
+infixl 1 @@
 
 -- | Lambda shorthand.
 (-->) :: Text -> Expression -> Expression
@@ -121,16 +105,16 @@ instance IsString Expression where
 -- | Expressions can be parsed from numbers.
 instance Num Expression where
   fromInteger = intE
-  e1 + e2 = EBinaryOp e1 BO_Plus e2
-  e1 - e2 = EBinaryOp e1 BO_Minus e2
-  e1 * e2 = EBinaryOp e1 BO_Times e2
-  negate = EUnaryOp UO_Neg
+  e1 + e2 = EBinaryOp e1 NPlus e2
+  e1 - e2 = EBinaryOp e1 NMinus e2
+  e1 * e2 = EBinaryOp e1 NMult e2
+  negate = EUnaryOp NNeg
   abs = error "No absolute value for Nix expressions"
   signum = error "No sign for Nix expressions"
 
 -- | Wrapper for binary `and`
 andE :: Expression -> Expression -> Expression
-andE e1 e2 = EBinaryOp e1 BO_And e2
+andE e1 e2 = EBinaryOp e1 NAnd e2
 
 orE :: Expression -> Expression -> Expression
-orE e1 e2 = EBinaryOp e1 BO_Or e2
+orE e1 e2 = EBinaryOp e1 NOr e2

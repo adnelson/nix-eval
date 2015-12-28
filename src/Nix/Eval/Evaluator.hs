@@ -1,6 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 module Nix.Eval.Evaluator where
 
 import Nix.Common hiding (trace)
@@ -17,16 +14,16 @@ evaluate env expr = case expr of
   EVar name -> case lookupEnv name env of
     Nothing -> throwPure $ NameError name env
     Just val -> val
-  ELambda param body -> pure $ VFunction param $ Closure env body
+  ELambda param body -> do
+    let func = Function param $ Closure env body
+    pure $ VFunction func
   EBinaryOp left op right -> do
     let func = interpretBinop op
         leftVal = evaluate env left
         rightVal = evaluate env right
     func leftVal rightVal
   EApply func arg -> evaluate env func >>= \case
-    VFunction param (Closure cEnv body) -> do
-      let argVal = evaluate env arg -- Lazily evaluated!
-      evaluate (insertEnv param argVal cEnv) body
+    VFunction f -> call evaluate f (evaluate env arg)
     VBuiltin _ unaryFunc -> unaryFunc $ evaluate env arg
     -- Binary builtins evaluate into unary builtins.
     VBuiltin2 name binaryFunc -> do

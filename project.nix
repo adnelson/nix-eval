@@ -1,6 +1,6 @@
 { mkDerivation, base, classy-prelude, containers, stdenv, text
 , unordered-containers, cabal-install, data-fix, system-filepath
-, hspec, QuickCheck
+, hspec, QuickCheck, hnix
 }:
 mkDerivation {
   pname = "nix-eval";
@@ -9,7 +9,7 @@ mkDerivation {
   testDepends = [hspec];
   buildDepends = [
     base classy-prelude containers text unordered-containers cabal-install
-    data-fix system-filepath QuickCheck
+    data-fix system-filepath QuickCheck hnix
   ];
   license = stdenv.lib.licenses.mit;
 }
