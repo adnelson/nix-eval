@@ -109,4 +109,8 @@ attrSetSpec = describe "attribute sets" $ do
   it "should access set members" $ do
     let mySet = attrsE [("x", 1)]
     (mySet !. "x") `shouldEvalTo` intV 1
---  it "should not
+  it "should not have a problem with error members unless accessed" $ do
+    let mySet = attrsE [("good", strE "hello"),
+                        ("bad", "non-existent-variable")]
+    (mySet !. "good") `shouldEvalTo` strV "hello"
+    (mySet !. "bad") `shouldErrorWith` NameError "non-existent-variable" emptyE

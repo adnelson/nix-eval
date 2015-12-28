@@ -15,7 +15,16 @@ shouldEvalTo = shouldEvalToWithEnv emptyE
 
 shouldEvalToWithEnv :: Environment -> Expression -> Value -> Expectation
 shouldEvalToWithEnv env expr val = evaluate env expr
-                                   `shouldBe` (Result $ Right val)
+                                   `shouldBe` (validR val)
+
+shouldErrorWith :: Expression -> EvalError -> Expectation
+shouldErrorWith = shouldErrorWithEnv emptyE
+
+
+shouldErrorWithEnv :: Environment -> Expression -> EvalError -> Expectation
+shouldErrorWithEnv env expr err = evaluate env expr
+                                   `shouldBe` (errorR err)
+
 
 shouldBeValid :: Result Value -> Expectation
 shouldBeValid res = shouldSatisfy res isValid
