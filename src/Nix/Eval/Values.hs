@@ -28,14 +28,9 @@ newtype Result a = Result (Either EvalError a)
 -- @newtype@ above.
 type LazyValue = Result Value
 
--- | Things which can be "called" with a lazy argument. This includes
--- functions defined in nix, as well as builtins. We require they be
--- Show and Eq instances, for testing/debugging purposes. We leave the
--- evaluator function to be passed in as an argument, so that we don't
--- have to put the evaluator code in this module.
-class (Show func) => Callable func where
-  call :: (Environment -> Expression -> LazyValue)
-       -> (func -> LazyValue -> LazyValue)
+-- | Wraps monadic bind.
+unwrapAndApply :: (Value -> LazyValue) -> LazyValue -> LazyValue
+unwrapAndApply function lval = lval >>= function
 
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.

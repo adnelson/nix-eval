@@ -101,20 +101,20 @@ bi_times = lazify2 times where
       v -> expectedInt v
     _ -> expectedOneOf [RT_Int] val1
 
--- | Implementation of logical AND. Short-circuits on its first argument.
+-- | Implementation of logical AND.
 bi_and :: Native
-bi_and = natify $ \val1 val2 -> case val1 of
-  VConstant (Bool False) -> validR $ boolV False
-  VConstant (Bool True) -> case val2 of
+bi_and = natify $ \val1 -> case val1 of
+  VConstant (Bool False) -> \_ -> validR $ boolV False
+  VConstant (Bool _) -> unwrapAndApply $ \case
     VConstant (Bool b) -> validR $ boolV b
     v -> expectedBool v
-  _ -> expectedBool val1
+  _ -> \_ -> expectedBool val1
 
 -- | Implementation of logical OR.
 bi_or :: Native
-bi_or = lazify2 $ \val1 -> case val1 of
+bi_or = natify $ \val1 -> case val1 of
   VConstant (Bool True) -> \_ -> validR $ boolV True
-  VConstant (Bool False) -> \val2 -> case val2 of
+  VConstant (Bool _) -> unwrapAndApply $ \case
     VConstant (Bool b) -> validR $ boolV b
     v -> expectedBool v
   _ -> \_ -> expectedBool val1
