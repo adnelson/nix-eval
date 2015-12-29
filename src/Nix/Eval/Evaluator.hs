@@ -18,18 +18,13 @@ evaluate env expr = case expr of
     let func = Function param $ Closure env body
     pure $ VFunction func
   EBinaryOp left op right -> do
-    let func = interpretBinop op
+    let (Func2 func) = interpretBinop op
         leftVal = evaluate env left
         rightVal = evaluate env right
     func leftVal rightVal
   EApply func arg -> evaluate env func >>= \case
     VFunction f -> call evaluate f (evaluate env arg)
-    VBuiltin _ unaryFunc -> unaryFunc $ evaluate env arg
-    -- Binary builtins evaluate into unary builtins.
-    VBuiltin2 name binaryFunc -> do
-      let res1 = evaluate env arg
-          unaryFunc = binaryFunc res1
-      pure $ VBuiltin (name <> " (applied)") unaryFunc
+    VCallable _ f -> call evaluate f (evaluate env arg)
     v -> expectedFunction v
   ENonRecursiveAttrs attrs -> do
     let attrs' = VAttrSet $ Environment $ map (evaluate env) attrs

@@ -58,18 +58,18 @@ builtinAppSpec = describe "application of builtins" $ do
   it "should work with unary builtins" $ do
     -- Make an ID function builtin, and try it out.
     let bi_id = lazify $ \v -> validR v
-        env = mkEnv [("id", VBuiltin "id" bi_id)]
+        env = mkEnv [("id", VCallable "id" bi_id)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("id" @@ 1) `shouldEvalTo'` intV 1
   it "should work with a const builtin" $ do
     -- Make a const function builtin, and try it.
     let bi_const = lazify2 $ \v _ -> validR v
-        env = mkEnv [("const", VBuiltin2 "const" bi_const)]
+        env = mkEnv [("const", VCallable "const" bi_const)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("const" @@ 1 @@ 2) `shouldEvalTo'` intV 1
   it "should work with a div builtin" $ do
     -- Add the division function builtin, and try it.
-    let env = mkEnv [("div", VBuiltin2 "div" bi_div)]
+    let env = mkEnv [("div", VCallable "div" bi_div)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("div" @@ 10 @@ 2) `shouldEvalTo'` intV 5
 
@@ -79,8 +79,8 @@ builtinAppSpec = describe "application of builtins" $ do
 lazyEvalSpec :: Spec
 lazyEvalSpec = describe "lazy evaluation" $ do
   -- Introduce builtin "throw" function.
-  let env = mkEnv [("throw", VBuiltin "throw" bi_throw),
-                   ("seq", VBuiltin2 "seq" bi_seq)]
+  let env = mkEnv [("throw", VCallable "throw" bi_throw),
+                   ("seq", VCallable "seq" bi_seq)]
       errE = "throw" @@ strE "oh no!"
       shouldEvalTo' = shouldEvalToWithEnv env
   it "should not evaluate a function argument unless needed" $ do

@@ -22,28 +22,36 @@ newtype Result a = Result (Either EvalError a)
 -- | A commonly-used type; the result of an evaluation.
 type RValue = Result Value
 
--- | Builtin functions concaptually take a value, but it's actually a
--- (possibly unevaluated) Result. They are functions which can either
--- return an error or a new Result.
-data NativeFunc1 = Func1 Text (RValue -> RValue)
-
-instance Show NativeFunc1 where
-  show (Func1 name _) = "Native function " <> show name
-
-instance Eq NativeFunc1 where
-  Func1 name _ == Func1 name' _ = name == name'
-
--- | Same as @NativeFunc1@, but for arity 2.
-data NativeFunc2 = Func2 Text (RValue -> RValue -> RValue)
-
 -- | Things which can be "called" with a lazy argument. This includes
 -- functions defined in nix, as well as builtins. We require they be
 -- Show and Eq instances, for testing/debugging purposes. We leave the
 -- evaluator function to be passed in as an argument, so that we don't
 -- have to put the evaluator code in this module.
-class (Show func, Eq func) => Callable func where
+class (Show func) => Callable func where
   call :: (Environment -> Expression -> RValue)
        -> (func -> RValue -> RValue)
+
+-- | Builtin functions concaptually take a value, but it's actually a
+-- (possibly unevaluated) Result. They are functions which can either
+-- return an error or a new Result.
+data NativeFunc1 = Func1 (RValue -> RValue)
+
+instance Show NativeFunc1 where
+  show (Func1 _) = "Native function, arity 1"
+
+instance Show NativeFunc2 where
+  show (Func2 _) = "Native function, arity 2"
+
+instance Callable NativeFunc1 where
+  call _ (Func1 unaryFunc) arg = unaryFunc arg
+
+instance Callable NativeFunc2 where
+  call _ (Func2 binaryFunc) arg = do
+    let unaryFunc = Func1 $ binaryFunc arg
+    pure $ VCallable "applied unary" unaryFunc
+
+-- | Same as @NativeFunc1@, but for arity 2.
+data NativeFunc2 = Func2 (RValue -> RValue -> RValue)
 
 -- | The type of runtime values.
 data Value
@@ -53,32 +61,25 @@ data Value
   -- ^ Attribute set values.
   | VList (Seq Value)
   -- ^ List values.
-  | forall func. Callable func => VCallable func
+  | forall func. Callable func => VCallable Text func
+  -- ^ Generic callables.
   | VFunction Function
   -- ^ Functions. These are more specific than generic callables
   -- because we want to be able to test them for equality (in our
   -- test suites)
-  | VBuiltin Text BuiltinFunc
-  -- ^ Built-in unary functions.
-  | VBuiltin2 Text BuiltinFunc2
-  -- ^ Built-in binary functions.
 
 instance Show Value where
   show (VConstant c) = show c
   show (VAttrSet s) = show s
   show (VList vs) = show vs
-  show (VCallable func) = show func
+  show (VCallable _ func) = show func
   show (VFunction func) = show func
-  show (VBuiltin name _) = "BUILTIN(" <> unpack name <> ")"
-  show (VBuiltin2 name _) = "BUILTIN2(" <> unpack name <> ")"
 
 instance Eq Value where
   VConstant c == VConstant c' = c == c'
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = vs == vs'
   VFunction f1 == VFunction f2 = f1 == f2
-  VBuiltin name _ == VBuiltin name' _ = name == name'
-  VBuiltin2 name _ == VBuiltin2 name' _ = name == name'
   _ == _ = False
 
 instance IsString Value where
@@ -139,11 +140,8 @@ typeOfValue :: Value -> RuntimeType
 typeOfValue (VConstant constant) = typeOfConstant constant
 typeOfValue (VAttrSet _) = RT_AttrSet
 typeOfValue (VList _) = RT_List
-typeOfValue (VCallable _) = RT_Function
+typeOfValue (VCallable _ _) = RT_Function
 typeOfValue (VFunction _) = RT_Function
-typeOfValue (VBuiltin _ _) = RT_Function
-typeOfValue (VBuiltin2 _ _) = RT_Function
-
 
 -------------------------------------------------------------------------------
 ------------------------------ Environments -----------------------------------
