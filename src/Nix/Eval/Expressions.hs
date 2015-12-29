@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Nix.Eval.Expressions where
 
 import Nix.Common
@@ -52,8 +51,12 @@ data Expression
 -- > }; z
 --
 -- This function will produce this transition.
-letE :: HashMap Text Expression -> Expression -> Expression
-letE = EWith . ERecursiveAttrs
+letsE :: [(Text, Expression)] -> Expression -> Expression
+letsE = EWith . ERecursiveAttrs . H.fromList
+
+-- | Wrapper for a single-variable @let@.
+letE :: Text -> Expression -> Expression -> Expression
+letE varName varExpr = letsE [(varName, varExpr)]
 
 -- | Creates a string literal expression.
 strE :: Text -> Expression
@@ -67,6 +70,10 @@ intE = constantE . Int
 boolE :: Bool -> Expression
 boolE = constantE . Bool
 
+-- | Creates a null literal expression.
+nullE :: Expression
+nullE = constantE Null
+
 -- | Turn a constant into an expression.
 constantE :: Constant -> Expression
 constantE = EConstant
@@ -75,9 +82,17 @@ constantE = EConstant
 varE :: Text -> Expression
 varE = EVar
 
+-- | Make a @with@ expression.
+withE :: Expression -> Expression -> Expression
+withE = EWith
+
 -- | Make an attribute set (non-recursive).
 attrsE :: [(Text, Expression)] -> Expression
 attrsE = ENonRecursiveAttrs . H.fromList
+
+-- | Make an attribute set (recursive).
+recAttrsE :: [(Text, Expression)] -> Expression
+recAttrsE = ERecursiveAttrs . H.fromList
 
 -- | Dot-reference into an attribute set.
 (!.) :: Expression -> Text -> Expression

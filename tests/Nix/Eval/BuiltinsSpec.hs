@@ -48,11 +48,14 @@ divisionSpec = describe "division" $ do
 
 natifySpec :: Spec
 natifySpec = describe "natify" $ do
-  it "shouldn't evaluate unless needed when using LazyValue" $ do
-    let badArg = errorR $ CustomError "oh crap"
-        constFunc = natify $ \(_ :: LazyValue) -> validR (intV 1)
-    applyNative constFunc [badArg] `shouldBe` validR (intV 1)
+  let badArg = errorR $ CustomError "oh crap"
+  describe "when using LazyValues" $ do
+    it "shouldn't evaluate unless needed (arity 1)" $ do
+      let constFunc = natify $ \(_::LazyValue) -> validR (intV 1)
+      applyNative constFunc [badArg] `shouldBe` validR (intV 1)
+    it "shouldn't evaluate unless needed (arity 2)" $ do
+      let constFunc2 = natify $ \(v::Value) (_::LazyValue) -> validR v
+      applyNative constFunc2 [validR nullV, badArg] `shouldBe` validR nullV
   it "SHOULD evaluate even if not needed when using Value" $ do
-    let badArg = errorR $ CustomError "oh crap"
-        constFunc = natify $ \(_ :: Value) -> validR (intV 1)
+    let constFunc = natify $ \(_::Value) -> validR (intV 1)
     applyNative constFunc [badArg] `shouldBe` badArg

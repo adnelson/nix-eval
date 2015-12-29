@@ -28,10 +28,24 @@ evaluate env expr = case expr of
     v -> expectedFunction v
   ENonRecursiveAttrs attrs -> do
     validR $ VAttrSet $ Environment $ map (evaluate env) attrs
+  ERecursiveAttrs attrs -> do
+    -- Create a new environment by evaluating the values of the set.
+    -- Each should be evaluated in an environment which includes the
+    -- variables being evaluated; thus it is a self-referential
+    -- definition. Unfortunately this means that (as currently
+    -- formulated) we cannot detect infinite recursion.
+    let newEnv :: Environment
+        newEnv = Environment (map (evaluate newEnv) attrs) `unionEnv` env
+    validR $ VAttrSet newEnv
   EAttrReference attrs key -> evaluate env attrs >>= \case
     VAttrSet set -> case lookupEnv key set of
       Nothing -> errorR $ KeyError key set
       Just res -> res
+    v -> expectedAttrs v
+  EWith attrs expr -> evaluate env attrs >>= \case
+    -- Evaluate the attribute expression. It must be an attribute set.
+    -- Bring all of those attributes into scope.
+    VAttrSet set -> evaluate (set `unionEnv` env) expr
     v -> expectedAttrs v
   e -> error ("haven't done " <> show e <> " yet")
 

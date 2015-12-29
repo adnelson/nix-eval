@@ -28,9 +28,10 @@ newtype Result a = Result (Either EvalError a)
 -- @newtype@ above.
 type LazyValue = Result Value
 
--- | Wraps monadic bind.
+-- | Synonym for monadic bind, applying a function inside of a
+-- 'Result', provided the 'Result' contains a 'Value'.
 unwrapAndApply :: (Value -> LazyValue) -> LazyValue -> LazyValue
-unwrapAndApply function lval = lval >>= function
+unwrapAndApply = (=<<)
 
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
@@ -44,14 +45,7 @@ data Native
 class Natify t where
   natify :: t -> Native
 
--- | Clearly this applies to values.
-instance Natify Value where
-  natify val = NativeValue $ validR val
-
--- | And also to errors.
-instance Natify EvalError where
-  natify err = NativeValue $ errorR err
-
+-- | Of course, this applies to lazy values.
 instance Natify LazyValue where
   natify res = NativeValue res
 
@@ -132,6 +126,10 @@ intV = vConstant . Int
 -- | Create a value from a bool.
 boolV :: Bool -> Value
 boolV = vConstant . Bool
+
+-- | Create a null value.
+nullV :: Value
+nullV = vConstant Null
 
 -- | Create an attribute set value.
 attrsV :: [(Text, Value)] -> Value
@@ -257,12 +255,16 @@ data EvalError
   -- ^ For division.
   | CustomError Text
   -- ^ Some custom error message (e.g. from a user).
+  | InfiniteRecursion
+  -- ^ When we have some infinite loop going on.
+  | AssertionError
+  -- ^ When an assertion fails.
   deriving (Show, Eq, Typeable)
 
 instance Exception EvalError
 
 -- | Wrap a value in a result.
-validR :: a -> Result a
+validR :: Value -> LazyValue
 validR = Result . Right
 
 -- | Wrap an error in a result.
