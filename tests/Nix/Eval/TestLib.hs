@@ -13,6 +13,8 @@ import Nix.Eval.Builtins
 shouldEvalTo :: Expression -> Value -> Expectation
 shouldEvalTo = shouldEvalToWithEnv emptyE
 
+infixl 0 `shouldEvalTo`
+
 shouldEvalToWithEnv :: Environment -> Expression -> Value -> Expectation
 shouldEvalToWithEnv env expr val = evaluate env expr
                                    `shouldBe` (validR val)
@@ -20,6 +22,7 @@ shouldEvalToWithEnv env expr val = evaluate env expr
 shouldErrorWith :: Expression -> EvalError -> Expectation
 shouldErrorWith = shouldErrorWithEnv emptyE
 
+infixl 0 `shouldErrorWith`
 
 shouldErrorWithEnv :: Environment -> Expression -> EvalError -> Expectation
 shouldErrorWithEnv env expr err = evaluate env expr

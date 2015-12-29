@@ -16,6 +16,7 @@ spec :: Spec
 spec = do
   constantToStringSpec
   valueToStringSpec
+  divisionSpec
 
 constantToStringSpec :: Spec
 constantToStringSpec = describe "constantToString" $ do
@@ -34,3 +35,12 @@ valueToStringSpec = describe "valueToString" $ do
       `shouldBe` validR "hey yo hi"
   it "should not translate sets" $ do
     valueToString (attrsV [("hey", "hi")]) `shouldSatisfy` isError
+
+divisionSpec :: Spec
+divisionSpec = describe "division" $ do
+  let mkInt = validR . intV
+      Func2 bi_div_ = bi_div
+  it "should divide numbers" $ do
+    bi_div_ (mkInt 6) (mkInt 3) `shouldBe` mkInt 2
+  it "should not divide by zero" $ property $
+    \i -> bi_div_ (mkInt i) (mkInt 0) `shouldBe` errorR DivideByZero

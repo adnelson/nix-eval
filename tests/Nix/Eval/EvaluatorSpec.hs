@@ -40,16 +40,16 @@ binopsSpec = describe "binary operators" $ do
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
   it "should evaluate the identity function" $ do
-    ("x" --> "x") `shouldEvalTo` VFunction "x" (emptyC "x")
+    ("x" --> "x") `shouldEvalTo` functionV "x" (emptyC "x")
   it "should evaluate nested functions" $ do
     ("x" --> "y" --> "x")
-      `shouldEvalTo` VFunction "x" (emptyC (ELambda "y" "x"))
+      `shouldEvalTo` functionV "x" (emptyC (ELambda "y" "x"))
   it "should evaluate function applications" $ do
-    let expr = ("x" --> "x") $$ (strE "hello")
+    let expr = ("x" --> "x") @@ (strE "hello")
     expr `shouldEvalTo` "hello"
   it "should capture environment in closure" $ do
     let env = mkEnv [("x", intV 1)]
-    shouldEvalToWithEnv env (("foo" --> "x") $$ intE 2) (intV 1)
+    shouldEvalToWithEnv env (("foo" --> "x") @@ intE 2) (intV 1)
 
 -- | Test the evaluation of builtins (not the builtins themselves, but
 -- that an arbitrary builtin is correctly evaluated)
@@ -58,24 +58,20 @@ builtinAppSpec = describe "application of builtins" $ do
   it "should work with unary builtins" $ do
     -- Make an ID function builtin, and try it out.
     let bi_id = lazify $ \v -> validR v
-        env = mkEnv [("id", VBuiltin "id" bi_id)]
+        env = mkEnv [("id", VCallable "id" bi_id)]
         shouldEvalTo' = shouldEvalToWithEnv env
-    ("id" $$ 1) `shouldEvalTo'` intV 1
+    ("id" @@ 1) `shouldEvalTo'` intV 1
   it "should work with a const builtin" $ do
     -- Make a const function builtin, and try it.
     let bi_const = lazify2 $ \v _ -> validR v
-        env = mkEnv [("const", VBuiltin2 "const" bi_const)]
+        env = mkEnv [("const", VCallable "const" bi_const)]
         shouldEvalTo' = shouldEvalToWithEnv env
-    (("const" $$ 1) $$ 2) `shouldEvalTo'` intV 1
+    ("const" @@ 1 @@ 2) `shouldEvalTo'` intV 1
   it "should work with a div builtin" $ do
-    -- Make a division function builtin, and try it.
-    let bi_div = lazify2 $ \v1 v2 -> case (v1, v2) of
-          (VConstant (Int i), VConstant (Int j)) -> pure $ intV (i `div` j)
-          (v, _) -> expectedInt v
-        env = mkEnv [("div", VBuiltin2 "div" bi_div)]
+    -- Add the division function builtin, and try it.
+    let env = mkEnv [("div", VCallable "div" bi_div)]
         shouldEvalTo' = shouldEvalToWithEnv env
-    (("div" $$ 10) $$ 2) `shouldEvalTo'` intV 5
-
+    ("div" @@ 10 @@ 2) `shouldEvalTo'` intV 5
 
 -- | This test more or less checks that our expressions are evaluated
 -- lazily; that is, that there is no need to evaluate an expression
@@ -83,16 +79,16 @@ builtinAppSpec = describe "application of builtins" $ do
 lazyEvalSpec :: Spec
 lazyEvalSpec = describe "lazy evaluation" $ do
   -- Introduce builtin "throw" function.
-  let env = mkEnv [("throw", VBuiltin "throw" bi_throw),
-                   ("seq", VBuiltin2 "seq" bi_seq)]
-      errE = "throw" $$ strE "oh no!"
+  let env = mkEnv [("throw", VCallable "throw" bi_throw),
+                   ("seq", VCallable "seq" bi_seq)]
+      errE = "throw" @@ strE "oh no!"
       shouldEvalTo' = shouldEvalToWithEnv env
   it "should not evaluate a function argument unless needed" $ do
     let
       -- A function which ignores its argument (just returns "1").
       constFunc = "_" --> intE 1
      -- The constant function should ignore an error argument.
-    (constFunc $$ errE) `shouldEvalTo'` intV 1
+    (constFunc @@ errE) `shouldEvalTo'` intV 1
   it "should short-circuit logical AND and OR" $ do
     let
       expr1 = boolE False `andE` errE
@@ -110,7 +106,11 @@ attrSetSpec = describe "attribute sets" $ do
     let mySet = attrsE [("x", 1)]
     (mySet !. "x") `shouldEvalTo` intV 1
   it "should not have a problem with error members unless accessed" $ do
+    -- Create an attribute set in which one of the members causes an
+    -- error when evaluated.
     let mySet = attrsE [("good", strE "hello"),
                         ("bad", "non-existent-variable")]
     (mySet !. "good") `shouldEvalTo` strV "hello"
     (mySet !. "bad") `shouldErrorWith` NameError "non-existent-variable" emptyE
+  it "should throw a KeyError if key doesn't exist" $ do
+    attrsE [] !. "x" `shouldErrorWith` KeyError "x" (mkEnv [])
