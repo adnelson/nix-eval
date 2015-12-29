@@ -1,5 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Nix.Eval.EvaluatorSpec (main, spec) where
 
 import Test.Hspec
@@ -16,11 +14,20 @@ main = hspec spec
 
 spec :: Spec
 spec = do
+  failureSpec
   functionsSpec
   binopsSpec
   lazyEvalSpec
   builtinAppSpec
   attrSetSpec
+  withSpec
+
+-- | Ensure that the failing expression fails.
+failureSpec :: Spec
+failureSpec = describe "failing expression" $ do
+  it "should fail to evaluate" $ do
+    shouldError failingExpression
+
 
 binopsSpec :: Spec
 binopsSpec = describe "binary operators" $ do
@@ -57,19 +64,18 @@ builtinAppSpec :: Spec
 builtinAppSpec = describe "application of builtins" $ do
   it "should work with unary builtins" $ do
     -- Make an ID function builtin, and try it out.
-    let bi_id = lazify $ \v -> validR v
-        env = mkEnv [("id", VCallable "id" bi_id)]
-        shouldEvalTo' = shouldEvalToWithEnv env
-    ("id" @@ 1) `shouldEvalTo'` intV 1
+    let bi_id = natify $ \v -> validR v
+        env = mkEnv [("id", VNative bi_id)]
+    shouldEvalToWithEnv env ("id" @@ 1) (intV 1)
   it "should work with a const builtin" $ do
     -- Make a const function builtin, and try it.
-    let bi_const = lazify2 $ \v _ -> validR v
-        env = mkEnv [("const", VCallable "const" bi_const)]
+    let bi_const = natify $ \v (_::LazyValue) -> validR v
+        env = mkEnv [("const", VNative bi_const)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("const" @@ 1 @@ 2) `shouldEvalTo'` intV 1
   it "should work with a div builtin" $ do
     -- Add the division function builtin, and try it.
-    let env = mkEnv [("div", VCallable "div" bi_div)]
+    let env = mkEnv [("div", VNative bi_div)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("div" @@ 10 @@ 2) `shouldEvalTo'` intV 5
 
@@ -79,38 +85,67 @@ builtinAppSpec = describe "application of builtins" $ do
 lazyEvalSpec :: Spec
 lazyEvalSpec = describe "lazy evaluation" $ do
   -- Introduce builtin "throw" function.
-  let env = mkEnv [("throw", VCallable "throw" bi_throw),
-                   ("seq", VCallable "seq" bi_seq)]
+  let env = mkEnv [("throw", VNative bi_throw),
+                   ("seq", VNative bi_seq)]
       errE = "throw" @@ strE "oh no!"
       shouldEvalTo' = shouldEvalToWithEnv env
   it "should not evaluate a function argument unless needed" $ do
-    let
-      -- A function which ignores its argument (just returns "1").
-      constFunc = "_" --> intE 1
+    -- Make a function which ignores its argument (just returns "1").
+    let constFunc = "_" --> intE 1
      -- The constant function should ignore an error argument.
     (constFunc @@ errE) `shouldEvalTo'` intV 1
-  it "should short-circuit logical AND and OR" $ do
-    let
-      expr1 = boolE False `andE` errE
-      expr2 = boolE True `orE` errE
+  it "should short-circuit logical AND" $ do
     -- Evaluation should return without triggering the error.
-    expr1 `shouldEvalTo'` boolV False
-    expr2 `shouldEvalTo'` boolV True
+    let expr = boolE False `andE` errE
+    expr `shouldEvalTo'` boolV False
+  it "should short-circuit logical OR" $ do
+    -- Evaluation should return without triggering the error.
+    let expr = boolE True `orE` errE
+    expr `shouldEvalTo'` boolV True
 
 attrSetSpec :: Spec
 attrSetSpec = describe "attribute sets" $ do
-  it "should evaluate attr set literals" $ do
+  describe "non-recursive" $ do
+    it "should evaluate attr set literals" $ do
+      let mySet = attrsE [("x", 1)]
+      mySet `shouldEvalTo` attrsV [("x", intV 1)]
+    it "should access set members" $ do
+      let mySet = attrsE [("x", 1)]
+      mySet !. "x" `shouldEvalTo` intV 1
+    it "should not have a problem with error members unless accessed" $ do
+      -- Create an attribute set in which one of the members causes an
+      -- error when evaluated.
+      let mySet = attrsE [("good", strE "hello"),
+                          ("bad", "undefined-variable")]
+      mySet !. "good" `shouldEvalTo` strV "hello"
+      mySet !. "bad" `shouldErrorWith` ["NameError", "undefined-variable"]
+    it "should throw a KeyError if key doesn't exist" $ do
+      attrsE [] !. "x" `shouldErrorWith` ["KeyError", "x"]
+  describe "recursive" $ do
+    it "should evaluate attr set literals" $ do
+      let mySet = recAttrsE [("x", 1)]
+      mySet `shouldEvalTo` attrsV [("x", intV 1)]
+    it "should access set members" $ do
+      let mySet = recAttrsE [("x", 1)]
+      mySet !. "x" `shouldEvalTo` intV 1
+    it "should allow inter-references in the set" $ do
+      let mySet = recAttrsE [("x", 1), ("y", "x")]
+      mySet !. "y" `shouldEvalTo` intV 1
+    it "should detect infinite loops" $ do
+      let infiniteSet = recAttrsE [("x", "y"), ("y", "x")]
+      pendingWith "we're not detecting these yet"
+      infiniteSet !. "y" `shouldErrorWith` ["InfiniteRecursion"]
+
+withSpec :: Spec
+withSpec = describe "with expressions" $ do
+  it "should introduce variables" $ do
     let mySet = attrsE [("x", 1)]
-    mySet `shouldEvalTo` attrsV [("x", intV 1)]
-  it "should access set members" $ do
-    let mySet = attrsE [("x", 1)]
-    (mySet !. "x") `shouldEvalTo` intV 1
-  it "should not have a problem with error members unless accessed" $ do
-    -- Create an attribute set in which one of the members causes an
-    -- error when evaluated.
-    let mySet = attrsE [("good", strE "hello"),
-                        ("bad", "non-existent-variable")]
-    (mySet !. "good") `shouldEvalTo` strV "hello"
-    (mySet !. "bad") `shouldErrorWith` NameError "non-existent-variable" emptyE
-  it "should throw a KeyError if key doesn't exist" $ do
-    attrsE [] !. "x" `shouldErrorWith` KeyError "x" (mkEnv [])
+    withE mySet "x" `shouldEvalTo` intV 1
+  it "should introduce variables from recursive sets" $ do
+    let mySet = recAttrsE [("x", 1), ("y", "x")]
+    withE mySet "x" `shouldEvalTo` intV 1
+    withE mySet "y" `shouldEvalTo` intV 1
+  it "should not have a problem with error variables unless accessed" $ do
+    let mySet = attrsE [("x", 1), ("fail", failingExpression)]
+    withE mySet "x" `shouldEvalTo` intV 1
+    shouldError $ withE mySet "fail"

@@ -1,6 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE GADTs #-}
 module Nix.Eval.Values where
 
@@ -15,43 +17,67 @@ import qualified Data.Sequence as Seq
 --------------------------------- Values --------------------------------------
 -------------------------------------------------------------------------------
 
--- | The result of evaluation: it might be an error.
+-- | The result of evaluation: it might be an error. In Haskell, this
+-- has the effect of creating lazy evaluation, as what is /inside/ the
+-- result is not evaluated until inspected at some point.
 newtype Result a = Result (Either EvalError a)
-  deriving (Show, Eq, Functor, Applicative, Monad)
+  deriving (Eq, Show, Functor, Applicative, Monad)
 
--- | A commonly-used type; the result of an evaluation.
-type RValue = Result Value
+-- | In practice, this is pretty much the only result type that we'll
+-- use, but we want to be able to use the Result as a monad, hence the
+-- @newtype@ above.
+type LazyValue = Result Value
 
--- | Things which can be "called" with a lazy argument. This includes
--- functions defined in nix, as well as builtins. We require they be
--- Show and Eq instances, for testing/debugging purposes. We leave the
--- evaluator function to be passed in as an argument, so that we don't
--- have to put the evaluator code in this module.
-class (Show func) => Callable func where
-  call :: (Environment -> Expression -> RValue)
-       -> (func -> RValue -> RValue)
+-- | Synonym for monadic bind, applying a function inside of a
+-- 'Result', provided the 'Result' contains a 'Value'.
+unwrapAndApply :: (Value -> LazyValue) -> LazyValue -> LazyValue
+unwrapAndApply = (=<<)
 
--- | Builtin functions concaptually take a value, but it's actually a
--- (possibly unevaluated) Result. They are functions which can either
--- return an error or a new Result.
-data NativeFunc1 = Func1 (RValue -> RValue)
+-- | An embedding of raw values. Lets us write functions in Haskell
+-- which operate on Nix values, and expose these in Nix code.
+data Native
+  = NativeValue LazyValue
+  -- ^ A terminal value (or an error)
+  | NativeFunction (LazyValue -> Native)
+  -- ^ A function which lets us take the "next step" given a value.
 
-instance Show NativeFunc1 where
-  show (Func1 _) = "Native function, arity 1"
+-- | Types which can be turned into 'Native' values.
+class Natify t where
+  natify :: t -> Native
 
-instance Show NativeFunc2 where
-  show (Func2 _) = "Native function, arity 2"
+-- | Of course, this applies to lazy values.
+instance Natify LazyValue where
+  natify res = NativeValue res
 
-instance Callable NativeFunc1 where
-  call _ (Func1 unaryFunc) arg = unaryFunc arg
+-- | This is where things get interesting: a 'Natify' instance for
+-- functions on lazy values lets us embed any function on 'LazyValue's
+-- as a 'Native' function. So for example, we can 'natify' a function
+-- of type @'LazyValue' -> -- 'LazyValue'@, or @'LazyValue' ->
+-- 'LazyValue' -> 'LazyValue'@, etc.
+instance Natify t => Natify (LazyValue -> t) where
+  natify function = NativeFunction $ \lval -> natify (function lval)
 
-instance Callable NativeFunc2 where
-  call _ (Func2 binaryFunc) arg = do
-    let unaryFunc = Func1 $ binaryFunc arg
-    pure $ VCallable "applied unary" unaryFunc
+-- | We can 'natify' an arbitrary function on values (provided its
+-- return type implements 'Natify'). However, it has the effect of
+-- forcing strict evaluation, as the only way to extract the inner
+-- value is to evaluate the 'Result' wrapper to WHNF.
+instance Natify t => Natify (Value -> t) where
+  natify function = NativeFunction $ \(Result res) -> case res of
+    Left err -> natify $ errorR err
+    Right val -> natify $ function val
 
--- | Same as @NativeFunc1@, but for arity 2.
-data NativeFunc2 = Func2 (RValue -> RValue -> RValue)
+-- | Apply a native value as if it were a function, to zero or more arguments.
+applyNative :: Native -> [LazyValue] -> LazyValue
+applyNative native [] = unwrapNative native
+applyNative native (rval:rvals) = case native of
+  NativeFunction func -> applyNative (func rval) rvals
+  NativeValue v -> expectedFunction v
+
+-- | Turn a 'Native' into an 'LazyValue'. This might rewrap it in a
+-- 'VNative' constructor, if the object is not a 'NativeValue'.
+unwrapNative :: Native -> LazyValue
+unwrapNative (NativeValue rv) = rv
+unwrapNative n = validR $ VNative n
 
 -- | The type of runtime values.
 data Value
@@ -61,25 +87,25 @@ data Value
   -- ^ Attribute set values.
   | VList (Seq Value)
   -- ^ List values.
-  | forall func. Callable func => VCallable Text func
-  -- ^ Generic callables.
-  | VFunction Function
-  -- ^ Functions. These are more specific than generic callables
-  -- because we want to be able to test them for equality (in our
-  -- test suites)
+  | VFunction Text Closure
+  -- ^ Functions, with a parameter and a closure.
+  | VNative Native
 
 instance Show Value where
   show (VConstant c) = show c
   show (VAttrSet s) = show s
   show (VList vs) = show vs
-  show (VCallable _ func) = show func
-  show (VFunction func) = show func
+  show (VFunction param closure) = concat [ unpack param, " => ("
+                                          , show closure, ")"]
+  show (VNative (NativeValue rv)) = show rv
+  show (VNative _) = "(native function)"
 
 instance Eq Value where
   VConstant c == VConstant c' = c == c'
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = vs == vs'
-  VFunction f1 == VFunction f2 = f1 == f2
+  VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
+  VNative (NativeValue nv) == VNative (NativeValue nv') = nv == nv'
   _ == _ = False
 
 instance IsString Value where
@@ -101,6 +127,10 @@ intV = vConstant . Int
 boolV :: Bool -> Value
 boolV = vConstant . Bool
 
+-- | Create a null value.
+nullV :: Value
+nullV = vConstant Null
+
 -- | Create an attribute set value.
 attrsV :: [(Text, Value)] -> Value
 attrsV = VAttrSet . mkEnv
@@ -111,7 +141,7 @@ listV = VList . Seq.fromList
 
 -- | Create a function value.
 functionV :: Text -> Closure -> Value
-functionV param body = VFunction $ Function param body
+functionV param body = VFunction param body
 
 -------------------------------------------------------------------------------
 ------------------------------- Value Types -----------------------------------
@@ -127,30 +157,42 @@ data RuntimeType
   | RT_List
   | RT_AttrSet
   | RT_Path
+  | RT_Error
   deriving (Show, Eq, Ord)
 
-typeOfConstant :: Constant -> RuntimeType
-typeOfConstant (String _) = RT_String
-typeOfConstant (Path _) = RT_Path
-typeOfConstant (Int _) = RT_Int
-typeOfConstant (Bool _) = RT_Bool
-typeOfConstant Null = RT_Null
+class HasRTType t where
+  typeOf :: t -> RuntimeType
 
-typeOfValue :: Value -> RuntimeType
-typeOfValue (VConstant constant) = typeOfConstant constant
-typeOfValue (VAttrSet _) = RT_AttrSet
-typeOfValue (VList _) = RT_List
-typeOfValue (VCallable _ _) = RT_Function
-typeOfValue (VFunction _) = RT_Function
+instance HasRTType Constant where
+  typeOf (String _) = RT_String
+  typeOf (Path _) = RT_Path
+  typeOf (Int _) = RT_Int
+  typeOf (Bool _) = RT_Bool
+  typeOf Null = RT_Null
+
+instance HasRTType t => HasRTType (Result t) where
+  typeOf (Result (Left _)) = RT_Error
+  typeOf (Result (Right x)) = typeOf x
+
+instance HasRTType Native where
+  typeOf (NativeValue v) = typeOf v
+  typeOf (NativeFunction _) = RT_Function
+
+instance HasRTType Value where
+  typeOf (VConstant constant) = typeOf constant
+  typeOf (VAttrSet _) = RT_AttrSet
+  typeOf (VList _) = RT_List
+  typeOf (VFunction _ _) = RT_Function
+  typeOf (VNative n) = typeOf n
 
 -------------------------------------------------------------------------------
 ------------------------------ Environments -----------------------------------
 -------------------------------------------------------------------------------
 
 -- | An environment is conceptually just a name -> value mapping, but the
--- element type is actually a @RValue@, so as to facilitate lazy
+-- element type is actually a @LazyValue@, so as to facilitate lazy
 -- evaluation.
-newtype Environment = Environment {eEnv :: HashMap Text (RValue)}
+newtype Environment = Environment {eEnv :: HashMap Text (LazyValue)}
   deriving (Eq)
 
 -- | We also use environments to represent attribute sets, since those
@@ -166,18 +208,6 @@ instance Show Environment where
 -- | A closure is an unevaluated expression, with just an environment.
 data Closure = Closure Environment Expression deriving (Eq)
 
--- | An evaluated function has a parameter name and a closure.
-data Function = Function Text Closure deriving (Eq)
-
-instance Callable Function where
-  call eval (Function param (Closure cEnv body)) arg =
-    eval (insertEnv param arg cEnv) body
-
-instance Show Function where
-  show (Function param closure) = concat [ unpack param, " => ("
-                                         , show closure, ")"]
-
-
 instance Show Closure where
   show (Closure env body) = "with " <> show env <> "; " <> show body
 
@@ -186,16 +216,16 @@ unionEnv :: Environment -> Environment -> Environment
 unionEnv (Environment e1) (Environment e2) = Environment (e1 `union` e2)
 
 -- | Look up a name in an environment.
-lookupEnv :: Text -> Environment -> Maybe (RValue)
+lookupEnv :: Text -> Environment -> Maybe (LazyValue)
 lookupEnv name (Environment env) = H.lookup name env
 
 -- | Insert a name/value into an environment.
-insertEnv :: Text -> RValue -> Environment -> Environment
+insertEnv :: Text -> LazyValue -> Environment -> Environment
 insertEnv name res (Environment env) = Environment $ H.insert name res env
 
 -- | Shorthand for creating an Environment from a list.
 mkEnv :: [(Text, Value)] -> Environment
-mkEnv = Environment . H.fromList . map (map $ Result . Right)
+mkEnv = Environment . H.fromList . map (map validR)
 
 -- | Empty environment.
 emptyE :: Environment
@@ -225,58 +255,56 @@ data EvalError
   -- ^ For division.
   | CustomError Text
   -- ^ Some custom error message (e.g. from a user).
+  | InfiniteRecursion
+  -- ^ When we have some infinite loop going on.
+  | AssertionError
+  -- ^ When an assertion fails.
   deriving (Show, Eq, Typeable)
 
 instance Exception EvalError
 
-isValid :: Result a -> Bool
-isValid (Result (Right _)) = True
-isValid _ = False
-
-isError :: Result a -> Bool
-isError (Result (Left _)) = True
-isError _ = False
-
-validR :: a -> Result a
+-- | Wrap a value in a result.
+validR :: Value -> LazyValue
 validR = Result . Right
 
-errorR :: EvalError -> Result a
+-- | Wrap an error in a result.
+errorR :: EvalError -> LazyValue
 errorR = Result . Left
 
-throwEvalError :: EvalError -> IO a
-throwEvalError = throwIO
-
-throwPure :: EvalError -> Result a
-throwPure = Result . Left
-
+-- | When expecting a single type.
 expectedTheType :: RuntimeType -> RuntimeType -> EvalError
 expectedTheType t butGot = TypeError (S.singleton t) butGot
 
-throwExpectedType :: RuntimeType -> Value -> Result a
+-- | Throw a type error when expecting a single type.
+throwExpectedType :: HasRTType t => RuntimeType -> t -> LazyValue
 throwExpectedType expected val =
-  throwPure $ expectedTheType expected (typeOfValue val)
+  errorR $ expectedTheType expected (typeOf val)
 
-expectedFunction :: Value -> Result a
+-- | When expecting a function.
+expectedFunction :: HasRTType t => t -> LazyValue
 expectedFunction = throwExpectedType RT_Function
 
-expectedString :: Value -> Result a
+-- | When expecting a string.
+expectedString :: HasRTType t => t -> LazyValue
 expectedString = throwExpectedType RT_String
 
-expectedInt :: Value -> Result a
+-- | When expecting an integer.
+expectedInt :: HasRTType t => t -> LazyValue
 expectedInt = throwExpectedType RT_Int
 
-expectedList :: Value -> Result a
+-- | When expecting a list.
+expectedList :: HasRTType t => t -> LazyValue
 expectedList = throwExpectedType RT_List
 
-expectedAttrs :: Value -> Result a
+-- | When expecting an attribute set.
+expectedAttrs :: HasRTType t => t -> LazyValue
 expectedAttrs = throwExpectedType RT_AttrSet
 
-expectedBool :: Value -> Result a
+-- | When expecting a boolean.
+expectedBool :: HasRTType t => t -> LazyValue
 expectedBool = throwExpectedType RT_Bool
 
-expectedOneOf :: [RuntimeType] -> Value -> Result a
+-- | When expecting one of a set of types..
+expectedOneOf :: HasRTType t => [RuntimeType] -> t -> LazyValue
 expectedOneOf types val =
-  throwPure $ TypeError (S.fromList types) $ typeOfValue val
-
-throwCustom :: Text -> Result a
-throwCustom = throwPure . CustomError
+  errorR $ TypeError (S.fromList types) $ typeOf val
