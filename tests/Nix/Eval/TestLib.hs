@@ -29,8 +29,12 @@ shouldErrorWithEnv env expr err = evaluate env expr
                                    `shouldBe` (errorR err)
 
 
-shouldBeValid :: Result Value -> Expectation
-shouldBeValid res = shouldSatisfy res isValid
+shouldBeValid :: Show a => Result a -> Expectation
+shouldBeValid res = shouldSatisfy res $ \case
+  Result (Left _) -> False
+  _ -> True
 
-shouldBeError :: Result Value -> Expectation
-shouldBeError res = shouldSatisfy res isError
+shouldBeError :: Show a => Result a -> Expectation
+shouldBeError res = shouldSatisfy res $ \case
+  Result (Left _) -> True
+  _ -> False

@@ -1,5 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Nix.Eval.EvaluatorSpec (main, spec) where
 
 import Test.Hspec
@@ -57,19 +55,18 @@ builtinAppSpec :: Spec
 builtinAppSpec = describe "application of builtins" $ do
   it "should work with unary builtins" $ do
     -- Make an ID function builtin, and try it out.
-    let bi_id = lazify $ \v -> validR v
-        env = mkEnv [("id", VCallable "id" bi_id)]
-        shouldEvalTo' = shouldEvalToWithEnv env
-    ("id" @@ 1) `shouldEvalTo'` intV 1
+    let bi_id = lazify1 $ \v -> validR v
+        env = mkEnv [("id", VNative bi_id)]
+    shouldEvalToWithEnv env ("id" @@ 1) (intV 1)
   it "should work with a const builtin" $ do
     -- Make a const function builtin, and try it.
     let bi_const = lazify2 $ \v _ -> validR v
-        env = mkEnv [("const", VCallable "const" bi_const)]
+        env = mkEnv [("const", VNative bi_const)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("const" @@ 1 @@ 2) `shouldEvalTo'` intV 1
   it "should work with a div builtin" $ do
     -- Add the division function builtin, and try it.
-    let env = mkEnv [("div", VCallable "div" bi_div)]
+    let env = mkEnv [("div", VNative bi_div)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("div" @@ 10 @@ 2) `shouldEvalTo'` intV 5
 
@@ -79,23 +76,23 @@ builtinAppSpec = describe "application of builtins" $ do
 lazyEvalSpec :: Spec
 lazyEvalSpec = describe "lazy evaluation" $ do
   -- Introduce builtin "throw" function.
-  let env = mkEnv [("throw", VCallable "throw" bi_throw),
-                   ("seq", VCallable "seq" bi_seq)]
+  let env = mkEnv [("throw", VNative bi_throw),
+                   ("seq", VNative bi_seq)]
       errE = "throw" @@ strE "oh no!"
       shouldEvalTo' = shouldEvalToWithEnv env
   it "should not evaluate a function argument unless needed" $ do
-    let
-      -- A function which ignores its argument (just returns "1").
-      constFunc = "_" --> intE 1
+    -- Make a function which ignores its argument (just returns "1").
+    let constFunc = "_" --> intE 1
      -- The constant function should ignore an error argument.
     (constFunc @@ errE) `shouldEvalTo'` intV 1
-  it "should short-circuit logical AND and OR" $ do
-    let
-      expr1 = boolE False `andE` errE
-      expr2 = boolE True `orE` errE
+  it "should short-circuit logical AND" $ do
     -- Evaluation should return without triggering the error.
-    expr1 `shouldEvalTo'` boolV False
-    expr2 `shouldEvalTo'` boolV True
+    let expr = boolE False `andE` errE
+    expr `shouldEvalTo'` boolV False
+  it "should short-circuit logical OR" $ do
+    -- Evaluation should return without triggering the error.
+    let expr = boolE True `orE` errE
+    expr `shouldEvalTo'` boolV True
 
 attrSetSpec :: Spec
 attrSetSpec = describe "attribute sets" $ do
