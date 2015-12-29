@@ -21,6 +21,7 @@ spec = do
   builtinAppSpec
   attrSetSpec
   withSpec
+  listSpec
 
 -- | Ensure that the failing expression fails.
 failureSpec :: Spec
@@ -28,21 +29,25 @@ failureSpec = describe "failing expression" $ do
   it "should fail to evaluate" $ do
     shouldError failingExpression
 
-
 binopsSpec :: Spec
 binopsSpec = describe "binary operators" $ do
   it "should evaluate +" $ property $
     \i j -> (intE i + intE j) `shouldEvalTo` intV (i + j)
   it "should evaluate + for strings" $ do
-    (strE "hey" + strE "yo") `shouldEvalTo` strV "heyyo"
-  it "should evaluate -" $ property $
-    \i j -> (intE i - intE j) `shouldEvalTo` intV (i - j)
-  it "should evaluate *" $ property $
-    \i j -> (intE i * intE j) `shouldEvalTo` intV (i * j)
-  it "should evaluate &&" $ property $
-    \b1 b2 -> (boolE b1 `andE` boolE b2) `shouldEvalTo` boolV (b1 && b2)
-  it "should evaluate ||" $ property $
-    \b1 b2 -> (boolE b1 `orE` boolE b2) `shouldEvalTo` boolV (b1 || b2)
+    strE "hey" + strE "yo" `shouldEvalTo` strV "heyyo"
+  it "should evaluate -" $ property $ \i j ->
+    intE i - intE j `shouldEvalTo` intV (i - j)
+  it "should evaluate *" $ property $ \i j ->
+    intE i * intE j `shouldEvalTo` intV (i * j)
+  it "should evaluate &&" $ property $ \b1 b2 ->
+    boolE b1 `andE` boolE b2 `shouldEvalTo` boolV (b1 && b2)
+  it "should evaluate ||" $ property $ \b1 b2 ->
+    boolE b1 `orE` boolE b2 `shouldEvalTo` boolV (b1 || b2)
+  it "should evaluate ++" $ do
+    let list1 = map Int [1, 2, 3]
+        list2 = map Int [4, 5, 6]
+    let conc = listE (map fromConstant list1) + listE (map fromConstant list2)
+    conc `shouldEvalTo` listV (map fromConstant $ list1 <> list2)
 
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
@@ -149,3 +154,18 @@ withSpec = describe "with expressions" $ do
     let mySet = attrsE [("x", 1), ("fail", failingExpression)]
     withE mySet "x" `shouldEvalTo` intV 1
     shouldError $ withE mySet "fail"
+
+listSpec :: Spec
+listSpec = describe "lists" $ do
+  it "should eval an empty list" $ do
+    listE [] `shouldEvalTo` listV []
+  it "should eval a list with a few elements" $ do
+    listE [1, 2, 3] `shouldEvalTo` listV (map intV [1, 2, 3])
+  describe "operations on lists" $ do
+    it "should map a function over a list" $ do
+      pending
+    describe "length" $ do
+      it "should get the length of a list" $ do
+        pending
+      it "shouldn't matter if the list has an error value" $ do
+        pending

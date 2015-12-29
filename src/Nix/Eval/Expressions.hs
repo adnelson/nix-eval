@@ -12,7 +12,7 @@ data Expression
   -- ^ Constants such as numbers etc.
   | EVar Text
   -- ^ Variables.
-  | EListLiteral [Expression]
+  | EList (Seq Expression)
   -- ^ List literals.
   | ENonRecursiveAttrs (HashMap Text Expression)
   -- ^ Attribute set literals, not recursive.
@@ -60,23 +60,22 @@ letE varName varExpr = letsE [(varName, varExpr)]
 
 -- | Creates a string literal expression.
 strE :: Text -> Expression
-strE = constantE . String
+strE = fromConstant . String
 
 -- | Creates an integer literal expression.
 intE :: Integer -> Expression
-intE = constantE . Int
+intE = fromConstant . Int
 
 -- | Creates a boolean literal expression.
 boolE :: Bool -> Expression
-boolE = constantE . Bool
+boolE = fromConstant . Bool
 
 -- | Creates a null literal expression.
 nullE :: Expression
-nullE = constantE Null
+nullE = fromConstant Null
 
--- | Turn a constant into an expression.
-constantE :: Constant -> Expression
-constantE = EConstant
+instance FromConstant Expression where
+  fromConstant = EConstant
 
 -- | Turn a variable name into an expression.
 varE :: Text -> Expression
@@ -93,6 +92,10 @@ attrsE = ENonRecursiveAttrs . H.fromList
 -- | Make an attribute set (recursive).
 recAttrsE :: [(Text, Expression)] -> Expression
 recAttrsE = ERecursiveAttrs . H.fromList
+
+-- | Make a list.
+listE :: [Expression] -> Expression
+listE = EList . fromList
 
 -- | Dot-reference into an attribute set.
 (!.) :: Expression -> Text -> Expression
@@ -120,6 +123,7 @@ instance IsString Expression where
 -- | Expressions can be parsed from numbers.
 instance Num Expression where
   fromInteger = intE
+  e1@(EList _) + e2 = EBinaryOp e1 NConcat e2
   e1 + e2 = EBinaryOp e1 NPlus e2
   e1 - e2 = EBinaryOp e1 NMinus e2
   e1 * e2 = EBinaryOp e1 NMult e2

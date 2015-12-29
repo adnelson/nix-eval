@@ -1,6 +1,7 @@
 module Nix.Eval.Evaluator where
 
 import Nix.Common hiding (trace)
+import Nix.Eval.Constants
 import Nix.Eval.Builtins (allBuiltins, interpretBinop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
@@ -10,7 +11,7 @@ evaluate :: Environment -- ^ Enclosing environment.
          -> Expression  -- ^ Expression to evaluate.
          -> LazyValue   -- ^ Result of evaluation.
 evaluate env expr = case expr of
-  EConstant constant -> return $ vConstant constant
+  EConstant constant -> return $ fromConstant constant
   EVar name -> case lookupEnv name env of
     Nothing -> errorR $ NameError name env
     Just val -> val
@@ -26,6 +27,7 @@ evaluate env expr = case expr of
       let env' = insertEnv param (evaluate env arg) cEnv
       evaluate env' body
     v -> expectedFunction v
+  EList exprs -> validR $ VList $ map (evaluate env) exprs
   ENonRecursiveAttrs attrs -> do
     validR $ VAttrSet $ Environment $ map (evaluate env) attrs
   ERecursiveAttrs attrs -> do

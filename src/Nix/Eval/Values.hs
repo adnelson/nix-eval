@@ -85,7 +85,7 @@ data Value
   -- ^ Constant values (isomorphic to constant expressions).
   | VAttrSet AttrSet
   -- ^ Attribute set values.
-  | VList (Seq Value)
+  | VList (Seq LazyValue)
   -- ^ List values.
   | VFunction Text Closure
   -- ^ Functions, with a parameter and a closure.
@@ -111,25 +111,24 @@ instance Eq Value where
 instance IsString Value where
   fromString = VConstant . fromString
 
--- | Create a value from a constant.
-vConstant :: Constant -> Value
-vConstant = VConstant
+instance FromConstant Value where
+  fromConstant = VConstant
 
 -- | Create a value from a string.
 strV :: Text -> Value
-strV = vConstant . String
+strV = fromConstant . String
 
 -- | Create a value from an integer.
 intV :: Integer -> Value
-intV = vConstant . Int
+intV = fromConstant . Int
 
 -- | Create a value from a bool.
 boolV :: Bool -> Value
-boolV = vConstant . Bool
+boolV = fromConstant . Bool
 
 -- | Create a null value.
 nullV :: Value
-nullV = vConstant Null
+nullV = fromConstant Null
 
 -- | Create an attribute set value.
 attrsV :: [(Text, Value)] -> Value
@@ -137,7 +136,7 @@ attrsV = VAttrSet . mkEnv
 
 -- | Create a list value.
 listV :: [Value] -> Value
-listV = VList . Seq.fromList
+listV = VList . Seq.fromList . map validR
 
 -- | Create a function value.
 functionV :: Text -> Closure -> Value

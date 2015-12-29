@@ -5,6 +5,7 @@ import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Constants
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+
 import qualified Data.Set as S
 
 -- | Conversion to environment variables for constants.
@@ -20,7 +21,9 @@ constantToString Null = ""
 valueToString :: Value -> Either EvalError Text
 valueToString (VConstant c) = pure $ constantToString c
 valueToString (VList vals) = do
-  strings <- mapM valueToString vals
+  strings <- forM vals $ \(Result res) -> case res of
+    Left err -> Left err
+    Right val -> valueToString val
   pure $ intercalate " " $ toList strings
 valueToString v = do
   let types = [RT_String, RT_Path, RT_Bool, RT_Int, RT_Null, RT_List]
@@ -71,7 +74,7 @@ bi_times = natify times where
     VConstant (Int i) -> case val2 of
       VConstant (Int i') -> validR $ intV $ i * i'
       v -> expectedInt v
-    _ -> expectedOneOf [RT_Int] val1
+    _ -> expectedInt val1
 
 -- | Implementation of logical AND.
 bi_and :: Native
@@ -105,12 +108,21 @@ bi_assert = natify $ \val res -> case val of
   VConstant (Bool False) -> errorR AssertionError
   v -> expectedBool v
 
+bi_concat :: Native
+bi_concat = natify $ \val1 val2 -> case val1 of
+  VList list1 -> case val2 of
+    VList list2 -> validR $ VList $ list1 <> list2
+    v -> expectedList v
+  _ -> expectedList val1
+
+
 interpretBinop :: NBinaryOp -> Native
 interpretBinop NPlus = bi_plus
 interpretBinop NAnd = bi_and
 interpretBinop NOr = bi_or
 interpretBinop NMinus = bi_minus
 interpretBinop NMult = bi_times
+interpretBinop NConcat = bi_concat
 interpretBinop b =
   error ("Binary operator " <> show b <> " is not yet implemented.")
 

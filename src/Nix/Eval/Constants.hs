@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Nix.Eval.Constants where
 
 import Nix.Common
@@ -13,3 +14,6 @@ data Constant
 
 instance IsString Constant where
   fromString = String . fromString
+
+class FromConstant t where
+  fromConstant :: Constant -> t
