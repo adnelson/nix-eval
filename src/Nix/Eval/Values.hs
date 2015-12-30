@@ -113,6 +113,7 @@ instance IsString Value where
 
 instance FromConstant Value where
   fromConstant = VConstant
+  fromConstants = listV . map fromConstant
 
 -- | Create a value from a string.
 strV :: Text -> Value

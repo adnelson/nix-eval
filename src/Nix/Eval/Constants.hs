@@ -17,3 +17,13 @@ instance IsString Constant where
 
 class FromConstant t where
   fromConstant :: Constant -> t
+  fromConstants :: [Constant] -> t
+
+fromInt :: (FromConstant t, Integral i) => i -> t
+fromInt = fromConstant . Int . fromIntegral
+
+fromText :: FromConstant t => Text -> t
+fromText = fromConstant . String
+
+fromBool :: FromConstant t => Bool -> t
+fromBool = fromConstant . Bool

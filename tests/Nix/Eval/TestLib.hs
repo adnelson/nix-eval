@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Nix.Eval.TestLib where
 
 import Data.Either
@@ -10,9 +11,20 @@ import Nix.Eval.Constants
 import Nix.Eval.Values
 import Nix.Eval.Builtins
 
+-- | Make an orphan Text instance; not sure why this isn't there already...
+instance Arbitrary Text where
+  arbitrary = pack <$> arbitrary
+
+instance Arbitrary Constant where
+  arbitrary = oneof
+    [ String . pack <$> arbitrary
+    , Path . fromString . (\(i::Int) -> "/foo/bar" <> show i) <$> arbitrary
+    , Int <$> arbitrary
+    , Bool <$> arbitrary
+    , pure Null ]
 
 shouldEvalTo :: Expression -> Value -> Expectation
-shouldEvalTo = shouldEvalToWithEnv emptyE
+shouldEvalTo expr val = runEval expr `shouldBe` validR val
 
 infixl 0 `shouldEvalTo`
 
@@ -21,7 +33,7 @@ shouldEvalToWithEnv env expr val = evaluate env expr
                                    `shouldBe` (validR val)
 
 shouldError :: Expression -> Expectation
-shouldError expr = shouldBeError $ evaluate allBuiltins expr
+shouldError expr = shouldBeError $ runEval expr
 
 shouldErrorWith :: Expression -> [String] -> Expectation
 shouldErrorWith = shouldErrorWithEnv allBuiltins

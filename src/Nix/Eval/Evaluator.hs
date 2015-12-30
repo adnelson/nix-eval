@@ -2,9 +2,28 @@ module Nix.Eval.Evaluator where
 
 import Nix.Common hiding (trace)
 import Nix.Eval.Constants
-import Nix.Eval.Builtins (allBuiltins, interpretBinop)
+import Nix.Eval.Builtins (builtins)
+import Nix.Eval.Operators (interpretBinop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+
+-- | Maps a function over a list. Needs to be defined in this module
+-- since it uses `evaluate` under the hood. This might not be necessary...
+builtin_map :: Native
+builtin_map = natify $ \func vlist -> case vlist of
+  VList list -> validR $ VList $ map (evalApply func) list
+  _ -> expectedList vlist
+
+evalApply :: LazyValue -> LazyValue -> LazyValue
+evalApply func arg = func >>= \case
+  VNative n -> applyNative n [arg]
+  VFunction param (Closure cEnv body) -> do
+    let env' = insertEnv param arg cEnv
+    evaluate env' body
+  v -> expectedFunction v
+
+allBuiltins :: Environment
+allBuiltins = insertEnv "map" (validR $ VNative builtin_map) builtins
 
 -- | Evaluate an expression within an environment.
 evaluate :: Environment -- ^ Enclosing environment.
@@ -21,12 +40,7 @@ evaluate env expr = case expr of
         leftVal = evaluate env left
         rightVal = evaluate env right
     applyNative func [leftVal, rightVal]
-  EApply func arg -> evaluate env func >>= \case
-    VNative n -> applyNative n [evaluate env arg]
-    VFunction param (Closure cEnv body) -> do
-      let env' = insertEnv param (evaluate env arg) cEnv
-      evaluate env' body
-    v -> expectedFunction v
+  EApply func arg -> evaluate env func `evalApply` evaluate env arg
   EList exprs -> validR $ VList $ map (evaluate env) exprs
   ENonRecursiveAttrs attrs -> do
     validR $ VAttrSet $ Environment $ map (evaluate env) attrs

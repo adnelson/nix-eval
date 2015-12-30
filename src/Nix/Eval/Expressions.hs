@@ -76,6 +76,7 @@ nullE = fromConstant Null
 
 instance FromConstant Expression where
   fromConstant = EConstant
+  fromConstants = listE . map fromConstant
 
 -- | Turn a variable name into an expression.
 varE :: Text -> Expression
