@@ -35,11 +35,8 @@ builtin_toString val = case valueToEnvString val of
   Left err -> errorR err
   Right str -> validR $ strV str
 
--- | Strict sequencing function.
-builtin_seq :: LazyValue -> LazyValue -> LazyValue
-builtin_seq (Result res1) res2 = case res1 of
-  Left err -> errorR err
-  Right (val :: Value) -> seq val res2
+builtin_seq :: Value -> LazyValue -> LazyValue
+builtin_seq = seq
 
 -- | The throw function forces an error to occur.
 builtin_throw :: Value -> LazyValue
@@ -63,4 +60,5 @@ builtin_length = \case
 -- evaluation.
 builtins :: AttrSet
 builtins = mkEnv [("throw", nativeV builtin_throw),
+                  ("seq", nativeV builtin_seq),
                   ("length", nativeV builtin_length)]
