@@ -88,23 +88,20 @@ builtinAppSpec = describe "application of builtins" $ do
 -- before passing it into a function.
 lazyEvalSpec :: Spec
 lazyEvalSpec = describe "lazy evaluation" $ do
-  -- Introduce builtin "throw" function.
-  let env = mkEnv [("throw", VNative builtin_throw)]
-      errE = "throw" @@ strE "oh no!"
-      shouldEvalTo' = shouldEvalToWithEnv env
+  let errE = "throw" @@ strE "oh no!"
   it "should not evaluate a function argument unless needed" $ do
     -- Make a function which ignores its argument (just returns "1").
     let constFunc = "_" --> intE 1
      -- The constant function should ignore an error argument.
-    (constFunc @@ errE) `shouldEvalTo'` intV 1
+    constFunc @@ errE `shouldEvalTo` intV 1
   it "should short-circuit logical AND" $ do
     -- Evaluation should return without triggering the error.
     let expr = boolE False `andE` errE
-    expr `shouldEvalTo'` boolV False
+    expr `shouldEvalTo` boolV False
   it "should short-circuit logical OR" $ do
     -- Evaluation should return without triggering the error.
     let expr = boolE True `orE` errE
-    expr `shouldEvalTo'` boolV True
+    expr `shouldEvalTo` boolV True
   -- Test the `natify` function.
   describe "natify" $ do
     let badArg = errorR $ CustomError "oh crap"

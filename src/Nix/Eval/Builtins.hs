@@ -30,37 +30,37 @@ valueToEnvString v = do
   Left $ TypeError (S.fromList types) (typeOf v)
 
 -- | Convert a value to a string.
-builtin_toString :: Native
-builtin_toString = natify $ \v -> case valueToEnvString v of
+builtin_toString :: Value -> LazyValue
+builtin_toString val = case valueToEnvString val of
   Left err -> errorR err
   Right str -> validR $ strV str
 
 -- | Strict sequencing function.
-builtin_seq :: Native
-builtin_seq = natify $ \(Result res1) res2 -> case res1 of
+builtin_seq :: LazyValue -> LazyValue -> LazyValue
+builtin_seq (Result res1) res2 = case res1 of
   Left err -> errorR err
   Right (val :: Value) -> seq val res2
 
 -- | The throw function forces an error to occur.
-builtin_throw :: Native
-builtin_throw = natify $ \case
+builtin_throw :: Value -> LazyValue
+builtin_throw = \case
   VConstant (String msg) -> errorR $ CustomError msg
   v -> expectedString v
 
 -- | Asserts its first argument is true, and then returns its second.
-builtin_assert :: Native
-builtin_assert = natify $ \val res -> case val of
+builtin_assert :: Value -> LazyValue -> LazyValue
+builtin_assert val res = case val of
   VConstant (Bool True) -> res
   VConstant (Bool False) -> errorR AssertionError
   v -> expectedBool v
 
-builtin_length :: Native
-builtin_length = natify $ \case
+builtin_length :: Value -> LazyValue
+builtin_length = \case
   VList vals -> validR $ fromInt (length vals)
   v -> expectedList v
 
 -- | The set of built-in functions to add to the environment before
 -- evaluation.
 builtins :: AttrSet
-builtins = mkEnv [("throw", VNative builtin_throw),
-                  ("length", VNative builtin_length)]
+builtins = mkEnv [("throw", nativeV builtin_throw),
+                  ("length", nativeV builtin_length)]

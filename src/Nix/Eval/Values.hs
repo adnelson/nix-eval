@@ -143,6 +143,10 @@ listV = VList . Seq.fromList . map validR
 functionV :: Text -> Closure -> Value
 functionV param body = VFunction param body
 
+-- | Create a native value.
+nativeV :: Natify n => n -> Value
+nativeV = VNative . natify
+
 -------------------------------------------------------------------------------
 ------------------------------- Value Types -----------------------------------
 -------------------------------------------------------------------------------
