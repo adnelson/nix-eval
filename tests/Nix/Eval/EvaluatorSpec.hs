@@ -34,24 +34,39 @@ failureSpec = describe "failing expression" $ do
 
 binopsSpec :: Spec
 binopsSpec = describe "binary operators" $ do
-  it "should evaluate +" $ property $ \i j ->
-    intE i $+ intE j `shouldEvalTo` intV (i + j)
-  it "should evaluate + for strings" $ property $ \s1 s2 -> do
-    strE s1 $+ strE s2 `shouldEvalTo` strV (s1 <> s2)
-  it "should evaluate -" $ property $ \i j ->
-    intE i $- intE j `shouldEvalTo` intV (i - j)
-  it "should evaluate *" $ property $ \i j ->
-    intE i $* intE j `shouldEvalTo` intV (i * j)
-  it "should evaluate &&" $ property $ \b1 b2 ->
-    boolE b1 $&& boolE b2 `shouldEvalTo` boolV (b1 && b2)
-  it "should evaluate ||" $ property $ \b1 b2 ->
-    boolE b1 $|| boolE b2 `shouldEvalTo` boolV (b1 || b2)
-  it "should evaluate ++" $ property $ \list1 list2 -> do
-    fromConstants list1 $++ fromConstants list2
-      `shouldEvalTo` fromConstants (list1 <> list2)
-  it "should evaluate //" $ property $ \set1 set2 -> do
-    fromConstantSet set1 $// fromConstantSet set2
-    `shouldEvalTo` fromConstantSet (set2 <> set1)
+  describe "numerical stuff" $ do
+    it "should evaluate +" $ property $ \i j ->
+      intE i $+ intE j `shouldEvalTo` intV (i + j)
+    it "should evaluate -" $ property $ \i j ->
+      intE i $- intE j `shouldEvalTo` intV (i - j)
+    it "should evaluate *" $ property $ \i j ->
+      intE i $* intE j `shouldEvalTo` intV (i * j)
+    describe "comparison" $ do
+      it "should evaluate <" $ property $ \i j -> do
+        fromInteg i $< fromInteg j `shouldEvalTo` fromBool (i < j)
+      it "should evaluate <=" $ property $ \i j -> do
+        fromInteg i $<= fromInteg j `shouldEvalTo` fromBool (i <= j)
+      it "should evaluate >" $ property $ \i j -> do
+        fromInteg i $> fromInteg j `shouldEvalTo` fromBool (i > j)
+      it "should evaluate >=" $ property $ \i j -> do
+        fromInteg i $>= fromInteg j `shouldEvalTo` fromBool (i >= j)
+  describe "logic" $ do
+    it "should evaluate &&" $ property $ \b1 b2 ->
+      boolE b1 $&& boolE b2 `shouldEvalTo` boolV (b1 && b2)
+    it "should evaluate ||" $ property $ \b1 b2 ->
+      boolE b1 $|| boolE b2 `shouldEvalTo` boolV (b1 || b2)
+    it "should evaluate ->" $ property $ \b1 b2 ->
+      boolE b1 $-> boolE b2 `shouldEvalTo`
+        boolV (if b1 then b2 else True)
+  describe "data structures" $ do
+    it "should evaluate ++" $ property $ \list1 list2 -> do
+      fromConstants list1 $++ fromConstants list2
+        `shouldEvalTo` fromConstants (list1 <> list2)
+    it "should evaluate //" $ property $ \set1 set2 -> do
+      fromConstantSet set1 $// fromConstantSet set2
+      `shouldEvalTo` fromConstantSet (set2 <> set1)
+    it "should evaluate + for strings" $ property $ \s1 s2 -> do
+      strE s1 $+ strE s2 `shouldEvalTo` strV (s1 <> s2)
   describe "equality" $ do
     it "equal things are equal" $ property $ \constant -> do
       fromConstant constant $== fromConstant constant
@@ -98,7 +113,7 @@ builtinAppSpec = describe "application of builtins" $ do
     ("const" @@ 1 @@ 2) `shouldEvalTo'` intV 1
   it "should work with a div builtin" $ do
     -- Add the division function builtin, and try it.
-    let env = mkEnv [("div", VNative binop_div)]
+    let env = mkEnv [("div", VNative $ natify binop_div)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("div" @@ 10 @@ 2) `shouldEvalTo'` intV 5
 

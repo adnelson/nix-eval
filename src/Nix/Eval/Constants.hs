@@ -15,10 +15,23 @@ data Constant
 instance IsString Constant where
   fromString = String . fromString
 
+class ToConstant t where
+  toConstant :: t -> Constant
+
+instance ToConstant Text where toConstant = String
+instance ToConstant Bool where toConstant = Bool
+instance ToConstant FilePath where toConstant = Path
+instance ToConstant Integer where toConstant = Int
+
 class FromConstant t where
   fromConstant :: Constant -> t
   fromConstants :: [Constant] -> t
   fromConstantSet :: HashMap Text Constant -> t
+
+-- | Convert a primitive into something which can be made from a
+-- constant. So for example `convert 1 :: Expression`
+convert :: (ToConstant prim, FromConstant t) => prim -> t
+convert = fromConstant . toConstant
 
 fromInt :: (FromConstant t, Integral i) => i -> t
 fromInt = fromConstant . Int . fromIntegral

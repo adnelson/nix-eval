@@ -10,7 +10,7 @@ module Nix.Common (
   ) where
 
 import ClassyPrelude hiding (assert, asList, find, FilePath, bracket,
-                             maximum, maximumBy, (</>),
+                             maximum, maximumBy, (</>), ($>),
                              minimum, try, stripPrefix, ioError,
                              mapM_, sequence_, foldM, forM_,
                              filterM, replicateM, writeFile, readFile)

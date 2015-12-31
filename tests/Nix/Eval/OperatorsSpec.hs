@@ -17,8 +17,9 @@ spec = do
 
 divisionSpec :: Spec
 divisionSpec = describe "division" $ do
+  let div_ = natify binop_div
   let mkInt = validR . intV
   it "should divide numbers" $ do
-    applyNative binop_div [mkInt 6, mkInt 3] `shouldBe` mkInt 2
+    applyNative div_ [mkInt 6, mkInt 3] `shouldBe` mkInt 2
   it "should not divide by zero" $ property $ \i ->
-    applyNative binop_div [mkInt i, mkInt 0] `shouldBe` errorR DivideByZero
+    applyNative div_ [mkInt i, mkInt 0] `shouldBe` errorR DivideByZero
