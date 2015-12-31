@@ -17,6 +17,47 @@ import qualified Data.Sequence as Seq
 --------------------------------- Values --------------------------------------
 -------------------------------------------------------------------------------
 
+-- | The type of runtime values.
+data Value
+  = VConstant Constant
+  -- ^ Constant values (isomorphic to constant expressions).
+  | VAttrSet AttrSet
+  -- ^ Attribute set values.
+  | VList (Seq LazyValue)
+  -- ^ List values.
+  | VFunction Text Closure
+  -- ^ Functions, with a parameter and a closure.
+  | VNative Native
+
+instance Show Value where
+  show (VConstant c) = show c
+  show (VAttrSet s) = show s
+  show (VList vs) = show vs
+  show (VFunction param closure) = concat [ unpack param, " => ("
+                                          , show closure, ")"]
+  show (VNative (NativeValue rv)) = show rv
+  show (VNative _) = "(native function)"
+
+instance Eq Value where
+  VConstant c == VConstant c' = c == c'
+  VAttrSet as == VAttrSet as' = as == as'
+  VList vs == VList vs' = vs == vs'
+  VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
+  VNative (NativeValue nv) == VNative (NativeValue nv') = nv == nv'
+  _ == _ = False
+
+instance IsString Value where
+  fromString = VConstant . fromString
+
+instance FromConstant Value where
+  fromConstant = VConstant
+  fromConstants = listV . map fromConstant
+  fromConstantSet set = VAttrSet $ Environment $ map fromConstant set
+
+-------------------------------------------------------------------------------
+------------------------------ Lazy Values ------------------------------------
+-------------------------------------------------------------------------------
+
 -- | The result of evaluation: it might be an error. In Haskell, this
 -- has the effect of creating lazy evaluation, as what is /inside/ the
 -- result is not evaluated until inspected at some point.
@@ -27,6 +68,11 @@ newtype Result a = Result (Either EvalError a)
 -- use, but we want to be able to use the Result as a monad, hence the
 -- @newtype@ above.
 type LazyValue = Result Value
+
+instance FromConstant LazyValue where
+  fromConstant = validR . fromConstant
+  fromConstants = validR . fromConstants
+  fromConstantSet = validR . fromConstantSet
 
 -- | Synonym for monadic bind, applying a function inside of a
 -- 'Result', provided the 'Result' contains a 'Value'.
@@ -78,42 +124,6 @@ applyNative native (rval:rvals) = case native of
 unwrapNative :: Native -> LazyValue
 unwrapNative (NativeValue rv) = rv
 unwrapNative n = validR $ VNative n
-
--- | The type of runtime values.
-data Value
-  = VConstant Constant
-  -- ^ Constant values (isomorphic to constant expressions).
-  | VAttrSet AttrSet
-  -- ^ Attribute set values.
-  | VList (Seq LazyValue)
-  -- ^ List values.
-  | VFunction Text Closure
-  -- ^ Functions, with a parameter and a closure.
-  | VNative Native
-
-instance Show Value where
-  show (VConstant c) = show c
-  show (VAttrSet s) = show s
-  show (VList vs) = show vs
-  show (VFunction param closure) = concat [ unpack param, " => ("
-                                          , show closure, ")"]
-  show (VNative (NativeValue rv)) = show rv
-  show (VNative _) = "(native function)"
-
-instance Eq Value where
-  VConstant c == VConstant c' = c == c'
-  VAttrSet as == VAttrSet as' = as == as'
-  VList vs == VList vs' = vs == vs'
-  VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
-  VNative (NativeValue nv) == VNative (NativeValue nv') = nv == nv'
-  _ == _ = False
-
-instance IsString Value where
-  fromString = VConstant . fromString
-
-instance FromConstant Value where
-  fromConstant = VConstant
-  fromConstants = listV . map fromConstant
 
 -- | Create a value from a string.
 strV :: Text -> Value

@@ -18,9 +18,13 @@ instance IsString Constant where
 class FromConstant t where
   fromConstant :: Constant -> t
   fromConstants :: [Constant] -> t
+  fromConstantSet :: HashMap Text Constant -> t
 
 fromInt :: (FromConstant t, Integral i) => i -> t
 fromInt = fromConstant . Int . fromIntegral
+
+fromInteg :: FromConstant t => Integer -> t
+fromInteg = fromConstant . Int
 
 fromText :: FromConstant t => Text -> t
 fromText = fromConstant . String

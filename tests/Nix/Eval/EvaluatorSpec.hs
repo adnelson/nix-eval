@@ -24,6 +24,7 @@ spec = do
   withSpec
   letSpec
   listSpec
+  unopsSpec
 
 -- | Ensure that the failing expression fails.
 failureSpec :: Spec
@@ -34,20 +35,37 @@ failureSpec = describe "failing expression" $ do
 binopsSpec :: Spec
 binopsSpec = describe "binary operators" $ do
   it "should evaluate +" $ property $ \i j ->
-    intE i + intE j `shouldEvalTo` intV (i + j)
+    intE i $+ intE j `shouldEvalTo` intV (i + j)
   it "should evaluate + for strings" $ property $ \s1 s2 -> do
-    strE s1 + strE s2 `shouldEvalTo` strV (s1 <> s2)
+    strE s1 $+ strE s2 `shouldEvalTo` strV (s1 <> s2)
   it "should evaluate -" $ property $ \i j ->
-    intE i - intE j `shouldEvalTo` intV (i - j)
+    intE i $- intE j `shouldEvalTo` intV (i - j)
   it "should evaluate *" $ property $ \i j ->
-    intE i * intE j `shouldEvalTo` intV (i * j)
+    intE i $* intE j `shouldEvalTo` intV (i * j)
   it "should evaluate &&" $ property $ \b1 b2 ->
-    boolE b1 `andE` boolE b2 `shouldEvalTo` boolV (b1 && b2)
+    boolE b1 $&& boolE b2 `shouldEvalTo` boolV (b1 && b2)
   it "should evaluate ||" $ property $ \b1 b2 ->
-    boolE b1 `orE` boolE b2 `shouldEvalTo` boolV (b1 || b2)
+    boolE b1 $|| boolE b2 `shouldEvalTo` boolV (b1 || b2)
   it "should evaluate ++" $ property $ \list1 list2 -> do
-    fromConstants list1 + fromConstants list2
+    fromConstants list1 $++ fromConstants list2
       `shouldEvalTo` fromConstants (list1 <> list2)
+  it "should evaluate //" $ property $ \set1 set2 -> do
+    fromConstantSet set1 $// fromConstantSet set2
+    `shouldEvalTo` fromConstantSet (set2 <> set1)
+  describe "equality" $ do
+    it "equal things are equal" $ property $ \constant -> do
+      fromConstant constant $== fromConstant constant
+        `shouldEvalTo` fromBool True
+    it "equal things are not unequal" $ property $ \constant -> do
+      fromConstant constant $!= fromConstant constant
+        `shouldEvalTo` fromBool False
+    it "unequal things are unequal" $ property $ \const1 const2 -> do
+      fromConstant const1 $== fromConstant const2
+        `shouldEvalTo` fromBool (const1 == const2)
+    it "unequal things are not equal" $ property $ \const1 const2 -> do
+      fromConstant const1 $!= fromConstant const2
+        `shouldEvalTo` fromBool (const1 /= const2)
+
 
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
@@ -220,3 +238,16 @@ listSpec = describe "lists" $ do
         property $ \list -> do
           "length" @@ (listE (failingExpression : map fromConstant list))
             `shouldEvalTo` fromInt (length list + 1)
+
+unopsSpec :: Spec
+unopsSpec = describe "unary operators" $ do
+  describe "numeric negation" $ do
+    it "should work once" $ property $ \num -> do
+      -(fromInteg num) `shouldEvalTo` fromInteg (-num)
+    it "should work twice" $ property $ \num -> do
+      -(-(fromInteg num)) `shouldEvalTo` fromInteg num
+  describe "logical negation" $ do
+    it "should work once" $ property $ \bool -> do
+      notE (fromBool bool) `shouldEvalTo` fromBool (not bool)
+    it "should work twice" $ property $ \bool -> do
+      notE (notE (fromBool bool)) `shouldEvalTo` fromBool bool

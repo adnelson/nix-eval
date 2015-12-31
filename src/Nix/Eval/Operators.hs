@@ -15,33 +15,30 @@ binop_concat = natify $ \val1 val2 -> case val1 of
 
 -- | Implementation of binary addition.
 binop_plus :: Native
-binop_plus = natify plus where
-  val1 `plus` val2 = case val1 of
-    VConstant (String s) -> case val2 of
-      VConstant (String s') -> validR $ strV $ s <> s'
-      v -> expectedString v
-    VConstant (Int i) -> case val2 of
-      VConstant (Int i') -> validR $ intV $ i + i'
-      v -> expectedInt v
-    _ -> expectedOneOf [RT_String, RT_Int] val1
+binop_plus = natify $ \val1 val2 -> case val1 of
+  VConstant (String s) -> case val2 of
+    VConstant (String s') -> validR $ strV $ s <> s'
+    v -> expectedString v
+  VConstant (Int i) -> case val2 of
+    VConstant (Int i') -> validR $ intV $ i + i'
+    v -> expectedInt v
+  _ -> expectedOneOf [RT_String, RT_Int] val1
 
 -- | Implementation of binary subtraction.
 binop_minus :: Native
-binop_minus = natify minus where
-  val1 `minus` val2 = case val1 of
-    VConstant (Int i) -> case val2 of
-      VConstant (Int i') -> validR $ intV $ i - i'
-      v -> expectedInt v
-    _ -> expectedOneOf [RT_Int] val1
+binop_minus = natify $ \val1 val2 -> case val1 of
+  VConstant (Int i) -> case val2 of
+    VConstant (Int i') -> validR $ intV $ i - i'
+    v -> expectedInt v
+  _ -> expectedOneOf [RT_Int] val1
 
 -- | Implementation of binary multiplication.
 binop_times :: Native
-binop_times = natify times where
-  val1 `times` val2 = case val1 of
-    VConstant (Int i) -> case val2 of
-      VConstant (Int i') -> validR $ intV $ i * i'
-      v -> expectedInt v
-    _ -> expectedInt val1
+binop_times = natify $ \val1 val2 -> case val1 of
+  VConstant (Int i) -> case val2 of
+    VConstant (Int i') -> validR $ intV $ i * i'
+    v -> expectedInt v
+  _ -> expectedInt val1
 
 -- | Implementation of logical AND.
 binop_and :: Native
@@ -68,6 +65,19 @@ binop_div = natify $ \v1 v2 -> case (v1, v2) of
   (VConstant (Int i), VConstant (Int j)) -> validR $ intV (i `div` j)
   (v, _) -> expectedInt v
 
+binop_update :: Value -> LazyValue -> LazyValue
+binop_update val = case val of
+  VAttrSet set1 -> unwrapAndApply $ \case
+    VAttrSet set2 -> validR $ VAttrSet (set2 `unionEnv` set1)
+    v -> expectedAttrs v
+  _ -> \_ -> expectedAttrs val
+
+binop_eq :: Value -> Value -> LazyValue
+binop_eq v1 v2 = fromBool (v1 == v2)
+
+binop_neq :: Value -> Value -> LazyValue
+binop_neq v1 v2 = fromBool (v1 /= v2)
+
 interpretBinop :: NBinaryOp -> Native
 interpretBinop NPlus = binop_plus
 interpretBinop NAnd = binop_and
@@ -75,5 +85,22 @@ interpretBinop NOr = binop_or
 interpretBinop NMinus = binop_minus
 interpretBinop NMult = binop_times
 interpretBinop NConcat = binop_concat
+interpretBinop NUpdate = natify binop_update
+interpretBinop NEq = natify binop_eq
+interpretBinop NNEq = natify binop_neq
 interpretBinop b =
   error ("Binary operator " <> show b <> " is not yet implemented.")
+
+unop_not :: Value -> LazyValue
+unop_not = \case
+  (VConstant (Bool b)) -> fromBool $ not b
+  v -> expectedBool v
+
+unop_neg :: Value -> LazyValue
+unop_neg = \case
+  (VConstant (Int i)) -> fromInteg (-i)
+  v -> expectedInt v
+
+interpretUnop :: NUnaryOp -> Native
+interpretUnop NNeg = natify unop_neg
+interpretUnop NNot = natify unop_not

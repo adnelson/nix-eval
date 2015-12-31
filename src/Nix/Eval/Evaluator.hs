@@ -3,7 +3,7 @@ module Nix.Eval.Evaluator where
 import Nix.Common hiding (trace)
 import Nix.Eval.Constants
 import Nix.Eval.Builtins (builtins)
-import Nix.Eval.Operators (interpretBinop)
+import Nix.Eval.Operators (interpretBinop, interpretUnop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
 
@@ -40,6 +40,9 @@ evaluate env expr = case expr of
         leftVal = evaluate env left
         rightVal = evaluate env right
     applyNative func [leftVal, rightVal]
+  EUnaryOp op expr' -> do
+    let func = interpretUnop op
+    applyNative func [evaluate env expr']
   EApply func arg -> evaluate env func `evalApply` evaluate env arg
   EList exprs -> validR $ VList $ map (evaluate env) exprs
   ENonRecursiveAttrs attrs -> do
@@ -62,7 +65,6 @@ evaluate env expr = case expr of
     -- Bring all of those attributes into scope.
     VAttrSet set -> evaluate (set `unionEnv` env) expr
     v -> expectedAttrs v
-  e -> error ("haven't done " <> show e <> " yet")
 
 -- | Evaluate an expression with the builtins in scope.
 runEval :: Expression -> LazyValue

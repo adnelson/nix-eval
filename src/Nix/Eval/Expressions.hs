@@ -77,6 +77,7 @@ nullE = fromConstant Null
 instance FromConstant Expression where
   fromConstant = EConstant
   fromConstants = listE . map fromConstant
+  fromConstantSet = ENonRecursiveAttrs . map fromConstant
 
 -- | Turn a variable name into an expression.
 varE :: Text -> Expression
@@ -98,16 +99,38 @@ recAttrsE = ERecursiveAttrs . H.fromList
 listE :: [Expression] -> Expression
 listE = EList . fromList
 
+-- | Logical negation.
+notE :: Expression -> Expression
+notE = EUnaryOp NNot
+
 -- | Dot-reference into an attribute set.
 (!.) :: Expression -> Text -> Expression
 (!.) = EAttrReference
-
 infixl 8 !.
+
+-- | Various nix binary operators
+($==), ($!=), ($<), ($<=), ($>), ($>=), ($&&), ($||), ($->),
+  ($//), ($+), ($-), ($*), ($/), ($++)
+  :: Expression -> Expression -> Expression
+e1 $== e2 = EBinaryOp e1 NEq e2
+e1 $!= e2 = EBinaryOp e1 NNEq e2
+e1 $< e2 = EBinaryOp e1 NLt e2
+e1 $<= e2 = EBinaryOp e1 NLte e2
+e1 $> e2 = EBinaryOp e1 NGt e2
+e1 $>= e2 = EBinaryOp e1 NGte e2
+e1 $&& e2 = EBinaryOp e1 NAnd e2
+e1 $|| e2 = EBinaryOp e1 NOr e2
+e1 $-> e2 = EBinaryOp e1 NImpl e2
+e1 $// e2 = EBinaryOp e1 NUpdate e2
+e1 $+ e2 = EBinaryOp e1 NPlus e2
+e1 $- e2 = EBinaryOp e1 NMinus e2
+e1 $* e2 = EBinaryOp e1 NMult e2
+e1 $/ e2 = EBinaryOp e1 NDiv e2
+e1 $++ e2 = EBinaryOp e1 NConcat e2
 
 -- | Function application expression.
 (@@) :: Expression -> Expression -> Expression
 e @@ e' = EApply e e'
-
 infixl 1 @@
 
 -- | Lambda shorthand.
