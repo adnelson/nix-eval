@@ -12,6 +12,7 @@ import Nix.Eval.Constants
 import Nix.Eval.Values
 import Nix.Eval.Builtins
 import qualified Data.HashMap.Strict as H
+import qualified Data.Set as S
 
 -- | Make an orphan Text instance; not sure why this isn't there already...
 instance Arbitrary Text where
@@ -24,6 +25,9 @@ instance (Arbitrary k, Eq k, Hashable k, Arbitrary v)
 
 instance Arbitrary a => Arbitrary (Seq a) where
   arbitrary = fromList <$> arbitrary
+
+instance (Arbitrary a, Ord a) => Arbitrary (Set a) where
+  arbitrary = S.fromList <$> arbitrary
 
 instance Arbitrary Constant where
   arbitrary = oneof
@@ -39,6 +43,42 @@ instance Arbitrary Expression where
   arbitrary = oneof
     [ EConstant <$> arbitrary
     , EList <$> arbitrary ]
+
+instance Arbitrary Value where
+  arbitrary = oneof
+    [ VConstant <$> arbitrary
+    , VAttrSet <$> arbitrary
+    , VList <$> arbitrary
+    , VFunction <$> arbitrary <*> arbitrary
+    , VNative <$> arbitrary ]
+
+instance Arbitrary Environment where
+  arbitrary = Environment <$> arbitrary
+
+instance Arbitrary Closure where
+  arbitrary = Closure <$> arbitrary <*> arbitrary
+
+instance Arbitrary a => Arbitrary (Result a) where
+  arbitrary = frequency
+    [ (10, Result . Right <$> arbitrary)
+    , (1, Result . Left <$> arbitrary) ]
+
+instance Arbitrary Native where
+  arbitrary = NativeValue <$> arbitrary
+
+instance Arbitrary EvalError where
+  arbitrary = oneof
+    [ NameError <$> arbitrary <*> arbitrary
+    , KeyError <$> arbitrary <*> arbitrary
+    , TypeError <$> arbitrary <*> arbitrary
+    , pure DivideByZero
+    , CustomError <$> arbitrary
+    , pure InfiniteRecursion
+    , pure AssertionError
+    ]
+
+instance Arbitrary RuntimeType where
+  arbitrary = oneof $ map pure $ enumFrom RT_Null
 
 shouldEvalTo :: Expression -> Value -> Expectation
 shouldEvalTo expr val = runEval expr `shouldBe` validR val

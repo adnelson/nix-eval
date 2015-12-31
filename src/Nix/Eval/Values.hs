@@ -172,7 +172,7 @@ data RuntimeType
   | RT_AttrSet
   | RT_Path
   | RT_Error
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Enum)
 
 class HasRTType t where
   typeOf :: t -> RuntimeType
@@ -198,6 +198,9 @@ instance HasRTType Value where
   typeOf (VList _) = RT_List
   typeOf (VFunction _ _) = RT_Function
   typeOf (VNative n) = typeOf n
+
+hasType :: HasRTType t => RuntimeType -> t -> Bool
+hasType type_ x = typeOf x == type_
 
 -------------------------------------------------------------------------------
 ------------------------------ Environments -----------------------------------

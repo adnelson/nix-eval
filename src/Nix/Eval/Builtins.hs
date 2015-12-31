@@ -56,6 +56,19 @@ builtin_length = \case
   VList vals -> validR $ fromInt (length vals)
   v -> expectedList v
 
+mkTypeTest :: RuntimeType -> Value -> LazyValue
+mkTypeTest type_ = convert . hasType type_
+
+-- | A bunch of runtime type checking tests.
+builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,
+  builtin_isBool, builtin_isNull :: Value -> LazyValue
+builtin_isAttrs = mkTypeTest RT_AttrSet
+builtin_isList = mkTypeTest RT_List
+builtin_isFunction = mkTypeTest RT_Function
+builtin_isInt = mkTypeTest RT_Int
+builtin_isBool = mkTypeTest RT_Bool
+builtin_isNull = mkTypeTest RT_Null
+
 -- | The set of built-in functions to add to the environment before
 -- evaluation.
 builtins :: AttrSet

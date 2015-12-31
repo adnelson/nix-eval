@@ -15,6 +15,7 @@ spec :: Spec
 spec = do
   constantToEnvStringSpec
   valueToEnvStringSpec
+  mkTypeTestSpec
 
 constantToEnvStringSpec :: Spec
 constantToEnvStringSpec = describe "constantToEnvString" $ do
@@ -30,10 +31,31 @@ valueToEnvStringSpec = describe "valueToEnvString" $ do
         expected = intercalate " " strs
     valueToEnvString (fromConstants strCs) `shouldBe` Right expected
   it "should translate nested lists" $ do
-    valueToEnvString (listV ["hey", "yo"]) `shouldBe` Right "hey yo"
     valueToEnvString (listV ["hey", listV ["yo", "hi"]])
       `shouldBe` Right "hey yo hi"
   it "should not translate sets" $ do
     valueToEnvString (attrsV [("hey", strV "hi")]) `shouldSatisfy` \case
       Left _ -> True
       Right _ -> False
+
+mkTypeTestSpec :: Spec
+mkTypeTestSpec = describe "mkTypeTest function" $ do
+  it "should test types of constants correctly" $ do
+    property $ \constant -> do
+      let test = mkTypeTest (typeOf constant)
+      test (fromConstant constant) `shouldBe` convert True
+  it "should test types of arbitrary values correctly" $ do
+    property $ \val rttype -> do
+      let test = mkTypeTest rttype
+      test val `shouldBe` convert (typeOf val == rttype)
+  it "should test lists correctly" $ do
+    property $ \constantList -> do
+      let test = mkTypeTest RT_List
+      test (fromConstants constantList) `shouldBe` convert True
+  it "should test sets correctly" $ do
+    property $ \constantSet -> do
+      let test = mkTypeTest RT_AttrSet
+      test (fromConstantSet constantSet) `shouldBe` convert True
+  it "should test functions correctly" $ do
+    property $ \param closure ->
+      mkTypeTest RT_Function (VFunction param closure) `shouldBe` convert True
