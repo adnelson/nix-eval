@@ -22,6 +22,7 @@ spec = do
   builtinAppSpec
   attrSetSpec
   withSpec
+  letSpec
   listSpec
 
 -- | Ensure that the failing expression fails.
@@ -158,10 +159,30 @@ withSpec = describe "with expressions" $ do
     let mySet = recAttrsE [("x", 1), ("y", "x")]
     withE mySet "x" `shouldEvalTo` intV 1
     withE mySet "y" `shouldEvalTo` intV 1
+  it "should not propagate environment into the record" $ do
+    let expr = letsE
+                 -- Introduce a variable `x`.
+                 [("x", 1),
+                 -- make a variable `r` which doesn't have `x`.
+                  ("r", recAttrsE [])]
+                 -- Attempt to evaluate `r.x`.
+                 ("r" !. "x")
+    -- This should result in a key error.
+    expr `shouldErrorWith` ["KeyError", "x"]
   it "should not have a problem with error variables unless accessed" $ do
     let mySet = attrsE [("x", 1), ("fail", failingExpression)]
     withE mySet "x" `shouldEvalTo` intV 1
     shouldError $ withE mySet "fail"
+
+letSpec :: Spec
+letSpec = describe "let conversion" $ do
+  it "should introduce a variable" $ property $ \constant -> do
+    letE "x" (fromConstant constant) "x" `shouldEvalTo` fromConstant constant
+  it "should let variables reference each other" $ do
+    property $ \constant -> do
+      let expr = letsE [("x", fromConstant constant),
+                        ("y", "x")] "y"
+      expr `shouldEvalTo` fromConstant constant
 
 listSpec :: Spec
 listSpec = describe "lists" $ do
