@@ -162,6 +162,9 @@ attrSetSpec = describe "attribute sets" $ do
     it "should access set members" $ do
       let mySet = attrsE [("x", 1)]
       mySet !. "x" `shouldEvalTo` intV 1
+    it "should access nested set members" $ do
+      let mySet = attrsE [("x", (attrsE [("y", 1)]))]
+      mySet !. "x" !. "y" `shouldEvalTo` intV 1
     it "should not have a problem with error members unless accessed" $ do
       -- Create an attribute set in which one of the members causes an
       -- error when evaluated.
@@ -178,6 +181,13 @@ attrSetSpec = describe "attribute sets" $ do
     it "should access set members" $ do
       let mySet = recAttrsE [("x", 1)]
       mySet !. "x" `shouldEvalTo` intV 1
+    it "should access nested set members" $ do
+      -- This value is
+      -- rec {x = {y = x; z = 2};}
+      -- So accessing mySet.x.y.z should give 2.
+      let mySet = recAttrsE [("x", attrsE [("y", "x"),
+                                           ("z", 2)])]
+      mySet !. "x" !. "y" !. "z" `shouldEvalTo` intV 2
     it "should allow inter-references in the set" $ do
       let mySet = recAttrsE [("x", 1), ("y", "x")]
       mySet !. "y" `shouldEvalTo` intV 1

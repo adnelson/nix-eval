@@ -30,7 +30,7 @@ data Value
 instance NFData Value
 
 instance Show Value where
-  show (VConstant c) = show c
+  show (VConstant c) = "VConstant (" <> show c <> ")"
   show (VAttrSet s) = show s
   show (VList vs) = show vs
   show (VFunction param closure) = concat [ unpack param, " => ("
@@ -97,15 +97,17 @@ deeplyEval v = case v of
   VNative (NativeValue lval) -> deeplyEvalLazy lval
   VList lvals -> do
     -- Recur on items of the list, and check if any are errors.
-    let (oks, errs) = break (isError . deeplyEvalLazy) lvals
+    let (_, errs) = break (isError . deeplyEvalLazy) lvals
     case toList errs of
       [] -> validR v -- no errors, can just return the thing
       (err:_) -> err -- return the first error found
   VAttrSet (Environment lvals) -> do
-    let (oks, errs) = break (isError . deeplyEvalLazy) $ H.elems lvals
+    let (_, errs) = break (isError . deeplyEvalLazy) $ H.elems lvals
     case errs of
       [] -> validR v -- no errors, can just return the thing
       (err:_) -> err -- return the first error found
+  -- Note that we don't recur into functions (or NativeFunctions), and
+  -- since constants can't fail there's no need to handle them either.
   _ -> validR v
 
 deeplyEvalLazy :: LazyValue -> LazyValue

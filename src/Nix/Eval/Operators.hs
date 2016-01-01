@@ -68,6 +68,7 @@ binop_div v1 v2 = case (v1, v2) of
   (VConstant (Int i), VConstant (Int j)) -> validR $ intV (i `div` j)
   (v, _) -> expectedInt v
 
+-- | Adds all of the keys from the second set into the first.
 binop_update :: Value -> LazyValue -> LazyValue
 binop_update val = case val of
   VAttrSet set1 -> unwrapAndApply $ \case
@@ -75,9 +76,11 @@ binop_update val = case val of
     v -> expectedAttrs v
   _ -> \_ -> expectedAttrs val
 
+-- | Equality of values.
 binop_eq :: Value -> Value -> LazyValue
 binop_eq v1 v2 = fromBool (v1 == v2)
 
+-- | Inequality of values.
 binop_neq :: Value -> Value -> LazyValue
 binop_neq v1 v2 = fromBool (v1 /= v2)
 
