@@ -80,6 +80,12 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ map pure $ enumFrom RT_Null
 
+shouldEval :: Expression -> Expectation
+shouldEval expr = shouldBeValid $ runEval expr
+
+shouldEvalWith :: Environment -> Expression -> Expectation
+shouldEvalWith env expr = shouldBeValid $ evaluate env expr
+
 shouldEvalTo :: Expression -> Value -> Expectation
 shouldEvalTo expr val = runEval expr `shouldBe` validR val
 
@@ -118,7 +124,10 @@ shouldBeNameError res = shouldSatisfy res $ \case
   Result (Left (NameError _ _)) -> True
   _ -> False
 
-
 -- | An expression that will always fail to evaluate.
 failingExpression :: Expression
-failingExpression = "throw" @@ strE "this expression should fail"
+failingExpression = "throw" @@ strE "failed on purpose"
+
+-- | An expression that will always succeed evaluation.
+succeedingExpression :: Expression
+succeedingExpression = strE "success"

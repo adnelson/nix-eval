@@ -34,7 +34,9 @@ data Expression
   -- The first expression is an expression which must evaluate to an
   -- attribute set. All of the keys in the attribute set will be added to
   -- the environment before evaluating the second expression.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
+
+instance NFData Expression
 
 -- | A let statement of this form:
 --

@@ -1,9 +1,5 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE GADTs #-}
 module Nix.Eval.Values where
 
 import Nix.Common
@@ -28,6 +24,10 @@ data Value
   | VFunction Text Closure
   -- ^ Functions, with a parameter and a closure.
   | VNative Native
+  -- ^ Native values, which can be either values or functions.
+  deriving (Generic)
+
+instance NFData Value
 
 instance Show Value where
   show (VConstant c) = show c
@@ -62,7 +62,9 @@ instance FromConstant Value where
 -- has the effect of creating lazy evaluation, as what is /inside/ the
 -- result is not evaluated until inspected at some point.
 newtype Result a = Result (Either EvalError a)
-  deriving (Eq, Show, Functor, Applicative, Monad)
+  deriving (Eq, Show, Functor, Applicative, Monad, Generic)
+
+instance NFData a => NFData (Result a)
 
 -- | In practice, this is pretty much the only result type that we'll
 -- use, but we want to be able to use the Result as a monad, hence the
@@ -74,10 +76,46 @@ instance FromConstant LazyValue where
   fromConstants = validR . fromConstants
   fromConstantSet = validR . fromConstantSet
 
+-- | Tests if a lazy value is an error (forces WHNF evaluation)
+isError :: LazyValue -> Bool
+isError (Result (Left _)) = True
+isError _ = False
+
 -- | Synonym for monadic bind, applying a function inside of a
 -- 'Result', provided the 'Result' contains a 'Value'.
 unwrapAndApply :: (Value -> LazyValue) -> LazyValue -> LazyValue
 unwrapAndApply = (=<<)
+
+-------------------------------------------------------------------------------
+--------------------------- Deep Evaluation -----------------------------------
+-------------------------------------------------------------------------------
+
+-- | Most of the time we evaluate things lazily, but sometimes we want
+-- to be able to evaluate strictly (esp. in the `deepSeq` function).
+deeplyEval :: Value -> LazyValue
+deeplyEval v = case v of
+  VNative (NativeValue lval) -> deeplyEvalLazy lval
+  VList lvals -> do
+    -- Recur on items of the list, and check if any are errors.
+    let (oks, errs) = break (isError . deeplyEvalLazy) lvals
+    case toList errs of
+      [] -> validR v -- no errors, can just return the thing
+      (err:_) -> err -- return the first error found
+  VAttrSet (Environment lvals) -> do
+    let (oks, errs) = break (isError . deeplyEvalLazy) $ H.elems lvals
+    case errs of
+      [] -> validR v -- no errors, can just return the thing
+      (err:_) -> err -- return the first error found
+  _ -> validR v
+
+deeplyEvalLazy :: LazyValue -> LazyValue
+deeplyEvalLazy err@(Result (Left _)) = err
+deeplyEvalLazy (Result (Right v)) = deeplyEval v
+
+-------------------------------------------------------------------------------
+------------------------------- Native Values ---------------------------------
+-------------------------------------------------------------------------------
+
 
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
@@ -86,6 +124,9 @@ data Native
   -- ^ A terminal value (or an error)
   | NativeFunction (LazyValue -> Native)
   -- ^ A function which lets us take the "next step" given a value.
+  deriving (Generic)
+
+instance NFData Native
 
 -- | Types which can be turned into 'Native' values.
 class Natify t where
@@ -172,7 +213,9 @@ data RuntimeType
   | RT_AttrSet
   | RT_Path
   | RT_Error
-  deriving (Show, Eq, Ord, Enum)
+  deriving (Show, Eq, Ord, Enum, Generic)
+
+instance NFData RuntimeType
 
 class HasRTType t where
   typeOf :: t -> RuntimeType
@@ -210,11 +253,9 @@ hasType type_ x = typeOf x == type_
 -- element type is actually a @LazyValue@, so as to facilitate lazy
 -- evaluation.
 newtype Environment = Environment {eEnv :: HashMap Text (LazyValue)}
-  deriving (Eq)
+  deriving (Eq, Generic)
 
--- | We also use environments to represent attribute sets, since those
--- are lazily evaluated.
-type AttrSet = Environment
+instance NFData Environment
 
 -- | We use a nix-esque syntax for showing an environment.
 instance Show Environment where
@@ -222,11 +263,17 @@ instance Show Environment where
     showPair (n, v) = unpack n <> " = " <> show v
     items = intercalate "; " $ map showPair $ H.toList env
 
+-- | We also use environments to represent attribute sets, since those
+-- are lazily evaluated.
+type AttrSet = Environment
+
 -- | A closure is an unevaluated expression, with just an environment.
-data Closure = Closure Environment Expression deriving (Eq)
+data Closure = Closure Environment Expression deriving (Eq, Generic)
 
 instance Show Closure where
   show (Closure env body) = "with " <> show env <> "; " <> show body
+
+instance NFData Closure
 
 -- | Union two environments. Left-biased.
 unionEnv :: Environment -> Environment -> Environment
@@ -276,7 +323,9 @@ data EvalError
   -- ^ When we have some infinite loop going on.
   | AssertionError
   -- ^ When an assertion fails.
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq, Typeable, Generic)
+
+instance NFData EvalError
 
 instance Exception EvalError
 

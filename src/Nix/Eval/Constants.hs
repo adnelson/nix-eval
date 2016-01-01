@@ -10,7 +10,9 @@ data Constant
   | Int Integer
   | Bool Bool
   | Null
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
+
+instance NFData Constant
 
 instance IsString Constant where
   fromString = String . fromString

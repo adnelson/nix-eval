@@ -15,7 +15,7 @@ main = hspec spec
 
 spec :: Spec
 spec = do
-  failureSpec
+  testBalloonSpec
   functionsSpec
   binopsSpec
   lazyEvalSpec
@@ -26,11 +26,14 @@ spec = do
   listSpec
   unopsSpec
 
--- | Ensure that the failing expression fails.
-failureSpec :: Spec
-failureSpec = describe "failing expression" $ do
-  it "should fail to evaluate" $ do
+-- | Ensure that the failing expression fails, and succeeding
+-- expression succeeds.
+testBalloonSpec :: Spec
+testBalloonSpec = describe "test-balloon expressions" $ do
+  it "should fail to evaluate failing expression" $ do
     shouldError failingExpression
+  it "should evaluate succeeding expression" $ do
+    shouldEval succeedingExpression
 
 binopsSpec :: Spec
 binopsSpec = describe "binary operators" $ do

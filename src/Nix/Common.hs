@@ -6,6 +6,8 @@ module Nix.Common (
   module Data.Fix,
   module Filesystem.Path.CurrentOS,
   module Data.Sequence,
+  module GHC.Generics,
+  module Control.DeepSeq,
   pathToText
   ) where
 
@@ -21,6 +23,8 @@ import qualified Data.HashMap.Strict as H
 import Data.Sequence (Seq)
 import Control.Monad.State.Strict (StateT, MonadState(..))
 import Data.Fix
+import GHC.Generics
+import Control.DeepSeq (NFData(..))
 import Filesystem.Path.CurrentOS hiding (concat, null, (<.>), empty)
 
 -- | Convert a FilePath into Text.

@@ -3,6 +3,7 @@ module Nix.Eval.BuiltinsSpec (main, spec) where
 import Test.Hspec
 import Test.QuickCheck
 import Nix.Common
+import Nix.Eval.Expressions
 import Nix.Eval.Constants
 import Nix.Eval.Values
 import Nix.Eval.Builtins
@@ -16,6 +17,7 @@ spec = do
   constantToEnvStringSpec
   valueToEnvStringSpec
   mkTypeTestSpec
+  deepSeqSpec
 
 constantToEnvStringSpec :: Spec
 constantToEnvStringSpec = describe "constantToEnvString" $ do
@@ -59,3 +61,15 @@ mkTypeTestSpec = describe "mkTypeTest function" $ do
   it "should test functions correctly" $ do
     property $ \param closure ->
       mkTypeTest RT_Function (VFunction param closure) `shouldBe` convert True
+
+deepSeqSpec :: Spec
+deepSeqSpec = describe "deepSeq" $ do
+  let env = mkEnv [("deepSeq", nativeV builtin_deepSeq),
+                   ("throw", nativeV builtin_throw)]
+  it "should error on evaluating something that contains an error" $ do
+    shouldErrorWithEnv env ("deepSeq" @@ attrsE [("x", failingExpression)]
+                                      @@ succeedingExpression)
+                           ["CustomError", "failed on purpose"]
+  it "should return the second argument if no error" $ do
+    shouldEvalWith env ("deepSeq" @@ attrsE [("x", 1)]
+                                  @@ succeedingExpression)

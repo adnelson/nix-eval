@@ -7,6 +7,7 @@ import Nix.Eval.Expressions
 import Nix.Eval.Values
 
 import qualified Data.Set as S
+import qualified Data.HashMap.Strict as H
 
 -- | Conversion to environment variables for constants.
 constantToEnvString :: Constant -> Text
@@ -69,9 +70,22 @@ builtin_isInt = mkTypeTest RT_Int
 builtin_isBool = mkTypeTest RT_Bool
 builtin_isNull = mkTypeTest RT_Null
 
+-- | Deeply evaluate the first argument, and return the second if it's
+-- the first has no errors; else error.
+builtin_deepSeq :: Value -> LazyValue -> LazyValue
+builtin_deepSeq val = case deeplyEval val of
+  err@(Result (Left _)) -> \_ -> err
+  _ -> id
+
 -- | The set of built-in functions to add to the environment before
 -- evaluation.
 builtins :: AttrSet
-builtins = mkEnv [("throw", nativeV builtin_throw),
-                  ("seq", nativeV builtin_seq),
-                  ("length", nativeV builtin_length)]
+builtins = mkEnv [ ("throw", nativeV builtin_throw)
+                 , ("seq", nativeV builtin_seq)
+                 , ("length", nativeV builtin_length)
+                 , ("isAttrs", nativeV builtin_length)
+                 , ("isList", nativeV builtin_length)
+                 , ("isFunction", nativeV builtin_length)
+                 , ("isBool", nativeV builtin_length)
+                 , ("length", nativeV builtin_length)
+                 ]
