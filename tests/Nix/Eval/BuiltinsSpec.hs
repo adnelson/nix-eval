@@ -18,6 +18,8 @@ spec = do
   valueToEnvStringSpec
   mkTypeTestSpec
   deepSeqSpec
+  headSpec
+  elemAtSpec
 
 constantToEnvStringSpec :: Spec
 constantToEnvStringSpec = describe "constantToEnvString" $ do
@@ -73,3 +75,21 @@ deepSeqSpec = describe "deepSeq" $ do
   it "should return the second argument if no error" $ do
     shouldEvalWith env ("deepSeq" @@ attrsE [("x", 1)]
                                   @@ succeedingExpression)
+
+headSpec :: Spec
+headSpec = describe "list head" $ do
+  it "should get the head of a non-empty list" $ do
+    let list = listV [fromInt 1]
+    builtin_head list `shouldBe` convert (1 :: Integer)
+  it "should error on an empty list" $ do
+    builtin_head (listV []) `shouldBeErrorWith` ["IndexError"]
+
+elemAtSpec :: Spec
+elemAtSpec = describe "list index" $ do
+  it "should index correctly" $ do
+    builtin_elemAt (listV [intV 1, intV 2]) (fromInt 1)
+      `shouldBe` convert (2 :: Integer)
+  it "should error on an empty list" $ do
+    property $ \(i::Int) -> do
+      builtin_elemAt (listV []) (fromInt i)
+        `shouldBeErrorWith` ["IndexError"]

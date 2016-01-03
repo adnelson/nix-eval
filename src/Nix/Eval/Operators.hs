@@ -18,10 +18,10 @@ binop_concat val1 val2 = case val1 of
 binop_plus :: Value -> Value -> LazyValue
 binop_plus val1 val2 = case val1 of
   VConstant (String s) -> case val2 of
-    VConstant (String s') -> validR $ strV $ s <> s'
+    VConstant (String s') -> convert $ s <> s'
     v -> expectedString v
   VConstant (Int i) -> case val2 of
-    VConstant (Int i') -> validR $ intV $ i + i'
+    VConstant (Int i') -> convert $ i + i'
     v -> expectedInt v
   _ -> expectedOneOf [RT_String, RT_Int] val1
 
@@ -39,7 +39,7 @@ binop_and :: Value -> LazyValue -> LazyValue
 binop_and = \case
   VConstant (Bool False) -> \_ -> validR $ boolV False
   VConstant (Bool _) -> unwrapAndApply $ \case
-    VConstant (Bool b) -> validR $ boolV b
+    VConstant (Bool b) -> convert b
     v -> expectedBool v
   val -> \_ -> expectedBool val
 
@@ -48,7 +48,7 @@ binop_or :: Value -> LazyValue -> LazyValue
 binop_or = \case
   VConstant (Bool True) -> \_ -> validR $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \case
-    VConstant (Bool b) -> validR $ boolV b
+    VConstant (Bool b) -> convert b
     v -> expectedBool v
   val -> \_ -> expectedBool val
 
@@ -57,7 +57,7 @@ binop_impl :: Value -> LazyValue -> LazyValue
 binop_impl = \case
   VConstant (Bool False) -> \_ -> validR $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \case
-    VConstant (Bool b) -> validR $ boolV b
+    VConstant (Bool b) -> convert b
     v -> expectedBool v
   val -> \_ -> expectedBool val
 
@@ -106,12 +106,12 @@ interpretBinop NConcat = natify binop_concat
 
 unop_not :: Value -> LazyValue
 unop_not = \case
-  (VConstant (Bool b)) -> fromBool $ not b
+  (VConstant (Bool b)) -> convert $ not b
   v -> expectedBool v
 
 unop_neg :: Value -> LazyValue
 unop_neg = \case
-  (VConstant (Int i)) -> fromInteg (-i)
+  (VConstant (Int i)) -> convert (-i)
   v -> expectedInt v
 
 interpretUnop :: NUnaryOp -> Native

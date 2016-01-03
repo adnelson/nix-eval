@@ -6,6 +6,7 @@ import Test.Hspec
 import Test.QuickCheck hiding (Result)
 import Nix.Common
 import Nix.Types (NBinaryOp(..))
+import Nix.Eval
 import Nix.Eval.Expressions
 import Nix.Eval.Evaluator
 import Nix.Eval.Constants
@@ -118,6 +119,12 @@ shouldBeError :: Show a => Result a -> Expectation
 shouldBeError res = shouldSatisfy res $ \case
   Result (Left _) -> True
   _ -> False
+
+shouldBeErrorWith :: Show a => Result a -> [String] -> Expectation
+shouldBeErrorWith res strings = shouldSatisfy res $ \case
+  Result (Left err) -> all (`isInfixOf` show err) strings
+  _ -> False
+
 
 shouldBeNameError :: Show a => Result a -> Expectation
 shouldBeNameError res = shouldSatisfy res $ \case

@@ -315,6 +315,7 @@ data EvalError
   -- ^ If we attempt to evaluate an undefined variable.
   | KeyError Text AttrSet
   -- ^ If we attempt to grab a key which doesn't exist in a set.
+  | IndexError Integer Int
   | TypeError (Set RuntimeType) RuntimeType
   -- ^ Type-related errors.
   | DivideByZero

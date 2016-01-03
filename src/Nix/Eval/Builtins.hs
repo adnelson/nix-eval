@@ -52,11 +52,36 @@ builtin_assert val res = case val of
   VConstant (Bool False) -> errorR AssertionError
   v -> expectedBool v
 
+-- | Get the length of a list.
 builtin_length :: Value -> LazyValue
 builtin_length = \case
   VList vals -> validR $ fromInt (length vals)
   v -> expectedList v
 
+-- | Add to the front of a list.
+builtin_cons :: LazyValue -> Value -> LazyValue
+builtin_cons val = \case
+  VList list -> validR $ VList $ (val `cons` list)
+  v -> expectedList v
+
+-- | Index into list. The list is the first argument.
+builtin_elemAt :: Value -> Value -> LazyValue
+builtin_elemAt val1 val2 = case val1 of
+  VList list -> case val2 of
+    VConstant (Int i) | i < 0 -> errorR $ IndexError i (length list)
+    VConstant (Int i) -> case list `index` fromIntegral i of
+      Nothing -> errorR $ IndexError i (length list)
+      Just val -> val
+    v -> expectedInt v
+  _ -> expectedList val1
+
+-- | Get the head of a list.
+builtin_head :: Value -> LazyValue
+builtin_head val = case val of
+  VList _ -> builtin_elemAt val (fromInt 0)
+  _ -> expectedList val
+
+-- | Creates an `isX` function given a type to test a value against.
 mkTypeTest :: RuntimeType -> Value -> LazyValue
 mkTypeTest type_ = convert . hasType type_
 
