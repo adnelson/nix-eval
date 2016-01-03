@@ -32,49 +32,51 @@ mkBinopNum op val1 val2 = case val1 of
   VConstant (Int i) -> case val2 of
     VConstant (Int i') -> convert $ op i i'
     v -> expectedInt v
-  v -> expectedInt v
+  _ -> expectedInt val1
 
 -- | Implementation of logical AND. Short-circuits.
 binop_and :: Value -> LazyValue -> LazyValue
-binop_and val1 = case val1 of
+binop_and = \case
   VConstant (Bool False) -> \_ -> validR $ boolV False
   VConstant (Bool _) -> unwrapAndApply $ \case
     VConstant (Bool b) -> validR $ boolV b
     v -> expectedBool v
-  _ -> \_ -> expectedBool val1
+  val -> \_ -> expectedBool val
 
 -- | Implementation of logical OR. Short-circuits.
 binop_or :: Value -> LazyValue -> LazyValue
-binop_or val1 = case val1 of
+binop_or = \case
   VConstant (Bool True) -> \_ -> validR $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \case
     VConstant (Bool b) -> validR $ boolV b
     v -> expectedBool v
-  _ -> \_ -> expectedBool val1
+  val -> \_ -> expectedBool val
 
 -- | Implementation of logical implication. Short-circuits.
 binop_impl :: Value -> LazyValue -> LazyValue
-binop_impl val1 = case val1 of
+binop_impl = \case
   VConstant (Bool False) -> \_ -> validR $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \case
     VConstant (Bool b) -> validR $ boolV b
     v -> expectedBool v
-  _ -> \_ -> expectedBool val1
+  val -> \_ -> expectedBool val
 
 -- | Builtin division function; prevents divide-by-zero
 binop_div :: Value -> Value -> LazyValue
-binop_div v1 v2 = case (v1, v2) of
+binop_div val1 val2 = case (val1, val2) of
   (VConstant (Int _), VConstant (Int 0)) -> errorR DivideByZero
   (VConstant (Int i), VConstant (Int j)) -> validR $ intV (i `div` j)
-  (v, _) -> expectedInt v
+  (_, VConstant (Int _)) -> expectedInt val1
+  (VConstant (Int _), _) -> expectedInt val2
+  (_, _) -> expectedInt val1
 
 -- | Adds all of the keys from the second set into the first.
 binop_update :: Value -> LazyValue -> LazyValue
-binop_update val = case val of
+binop_update = \case
   VAttrSet set1 -> unwrapAndApply $ \case
     VAttrSet set2 -> validR $ VAttrSet (set2 `unionEnv` set1)
     v -> expectedAttrs v
-  _ -> \_ -> expectedAttrs val
+  val -> \_ -> expectedAttrs val
 
 -- | Equality of values.
 binop_eq :: Value -> Value -> LazyValue
@@ -84,6 +86,7 @@ binop_eq v1 v2 = fromBool (v1 == v2)
 binop_neq :: Value -> Value -> LazyValue
 binop_neq v1 v2 = fromBool (v1 /= v2)
 
+-- | Translate a binary operator into a native (binary) function.
 interpretBinop :: NBinaryOp -> Native
 interpretBinop NEq = natify binop_eq
 interpretBinop NNEq = natify binop_neq
