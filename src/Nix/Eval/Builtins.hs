@@ -5,6 +5,7 @@ import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Constants
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+import Nix.Eval.Operators (interpretBinop)
 
 import qualified Data.Set as S
 import qualified Data.HashMap.Strict as H
@@ -36,6 +37,8 @@ builtin_toString val = case valueToEnvString val of
   Left err -> errorR err
   Right str -> validR $ strV str
 
+-- | Using a strict value as the first argument here has the effect of forcing
+-- strict evaluation of the first argument.
 builtin_seq :: Value -> LazyValue -> LazyValue
 builtin_seq = seq
 
@@ -81,6 +84,13 @@ builtin_head val = case val of
   VList _ -> builtin_elemAt val (fromInt 0)
   _ -> expectedList val
 
+-- | Get the tail of a list.
+builtin_tail :: Value -> LazyValue
+builtin_tail val = case val of
+  VList list | length list == 0 -> errorR TailOfEmptyList
+  VList list -> validR $ VList (drop 1 list)
+  _ -> expectedList val
+
 -- | Creates an `isX` function given a type to test a value against.
 mkTypeTest :: RuntimeType -> Value -> LazyValue
 mkTypeTest type_ = convert . hasType type_
@@ -107,10 +117,14 @@ builtin_deepSeq val = case deeplyEval val of
 notImplemented :: Text -> LazyValue
 notImplemented name = errorR (NotImplemented name)
 
+-- | Get the type of a value as a string.
+builtin_typeOf :: Value -> LazyValue
+builtin_typeOf = convert . typeToString . typeOf
+
 -- | The `builtins` object.
 builtins :: AttrSet
 builtins = mkEnv
-  [ ("add", nativeV $ notImplemented "add")
+  [ ("add", nativeV $ interpretBinop NPlus)
   , ("all", nativeV $ notImplemented "all")
   , ("any", nativeV $ notImplemented "any")
   , ("attrNames", nativeV $ notImplemented "attrNames")
@@ -118,10 +132,10 @@ builtins = mkEnv
   , ("compareVersions", nativeV $ notImplemented "compareVersions")
   , ("concatLists", nativeV $ notImplemented "concatLists")
   , ("currentSystem", nativeV $ notImplemented "currentSystem")
-  , ("deepSeq", nativeV $ notImplemented "deepSeq")
+  , ("deepSeq", nativeV builtin_deepSeq)
   , ("div", nativeV $ notImplemented "div")
   , ("elem", nativeV $ notImplemented "elem")
-  , ("elemAt", nativeV $ notImplemented "elemAt")
+  , ("elemAt", nativeV builtin_elemAt)
   , ("fetchurl", nativeV $ notImplemented "fetchurl")
   , ("filter", nativeV $ notImplemented "filter")
   , ("filterSource", nativeV $ notImplemented "filterSource")
@@ -140,9 +154,9 @@ builtins = mkEnv
   , ("isList", nativeV builtin_isList)
   , ("isString", nativeV builtin_isString)
   , ("length", nativeV builtin_length)
-  , ("lessThan", nativeV $ notImplemented "lessThan")
+  , ("lessThan", nativeV $ interpretBinop NLt)
   , ("listToAttrs", nativeV $ notImplemented "listToAttrs")
-  , ("mul", nativeV $ notImplemented "mul")
+  , ("mul", nativeV $ interpretBinop NMult)
   , ("parseDrvName", nativeV $ notImplemented "parseDrvName")
   , ("pathExists", nativeV $ notImplemented "pathExists")
   , ("readDir", nativeV $ notImplemented "readDir")
@@ -151,7 +165,7 @@ builtins = mkEnv
   , ("seq", nativeV builtin_seq)
   , ("sort", nativeV $ notImplemented "sort")
   , ("stringLength", nativeV $ notImplemented "stringLength")
-  , ("sub", nativeV $ notImplemented "sub")
+  , ("sub", nativeV $ interpretBinop NMinus)
   , ("substring", nativeV $ notImplemented "substring")
   , ("tail", nativeV $ notImplemented "tail")
   , ("toFile", nativeV $ notImplemented "toFile")
@@ -159,7 +173,7 @@ builtins = mkEnv
   , ("toPath", nativeV $ notImplemented "toPath")
   , ("toXML", nativeV $ notImplemented "toXML")
   , ("trace", nativeV $ notImplemented "trace")
-  , ("typeOf", nativeV $ notImplemented "typeOf")
+  , ("typeOf", nativeV builtin_typeOf)
   ]
 
 -- | The set of objects which should appear at top-level.

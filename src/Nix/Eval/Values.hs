@@ -7,7 +7,7 @@ import Nix.Eval.Expressions
 import Nix.Eval.Constants
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
-import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 
 -------------------------------------------------------------------------------
 --------------------------------- Values --------------------------------------
@@ -134,6 +134,9 @@ instance NFData Native
 class Natify t where
   natify :: t -> Native
 
+instance Natify Native where
+  natify = id
+
 -- | Of course, this applies to lazy values.
 instance Natify LazyValue where
   natify res = NativeValue res
@@ -190,7 +193,7 @@ attrsV = VAttrSet . mkEnv
 
 -- | Create a list value.
 listV :: [Value] -> Value
-listV = VList . Seq.fromList . map validR
+listV = VList . fromList . map validR
 
 -- | Create a function value.
 functionV :: Text -> Closure -> Value
@@ -246,6 +249,9 @@ instance HasRTType Value where
 
 hasType :: HasRTType t => RuntimeType -> t -> Bool
 hasType type_ x = typeOf x == type_
+
+typeToString :: RuntimeType -> Text
+typeToString = T.toLower . T.replace "RT_" "" . tshow
 
 -------------------------------------------------------------------------------
 ------------------------------ Environments -----------------------------------
@@ -328,6 +334,7 @@ data EvalError
   -- ^ When an assertion fails.
   | NotImplemented Text
   -- ^ For built-in functions/objects that we haven't implemented yet.
+  | TailOfEmptyList
   deriving (Show, Eq, Typeable, Generic)
 
 instance NFData EvalError
