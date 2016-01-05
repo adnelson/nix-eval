@@ -54,7 +54,6 @@ evaluate env expr = case expr of
     -- variables being evaluated; thus it is a self-referential
     -- definition. Unfortunately this means that (as currently
     -- formulated) we cannot detect infinite recursion.
-    newEnv :: Environment
     newEnv = Environment $ map (evaluate (newEnv `unionEnv` env)) attrs
   EAttrReference attrs key -> evaluate env attrs >>= \case
     VAttrSet set -> case lookupEnv key set of

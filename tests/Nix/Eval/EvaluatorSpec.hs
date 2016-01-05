@@ -9,7 +9,6 @@ import Nix.Eval.Values
 import Nix.Eval.Expressions
 import Nix.Eval.TestLib
 import Nix.Eval.Operators (binop_div)
-import Nix.Eval.ExpectedBuiltins
 
 main :: IO ()
 main = hspec spec
@@ -24,7 +23,6 @@ spec = do
   withSpec
   letSpec
   listSpec
-  expectedBuiltinsSpec
 
 -- | Ensure that the failing expression fails, and succeeding
 -- expression succeeds.
@@ -216,15 +214,3 @@ listSpec = describe "lists" $ do
         property $ \list -> do
           "length" @@ (listE (failingExpression : map fromConstant list))
             `shouldEvalTo` fromInt (length list + 1)
-
-expectedBuiltinsSpec :: Spec
-expectedBuiltinsSpec = describe "primitive objects" $ do
-  describe "top-level" $ do
-    oforM_ topLevelKeys $ \key -> do
-      it ("should have at top level identifier " <> show key) $ do
-        varE key `shouldNotErrorWith` ["NameError"]
-
-  describe "builtins" $ do
-    oforM_ keysInBuiltins $ \key -> do
-        it ("should have under `builtin` the key " <> show key) $ do
-          "builtins" !. key `shouldNotErrorWith` ["KeyError"]
