@@ -2,7 +2,7 @@ module Nix.Eval.Evaluator where
 
 import Nix.Common hiding (trace)
 import Nix.Eval.Constants
-import Nix.Eval.Builtins (builtins)
+import Nix.Eval.Builtins (topLevelBuiltins)
 import Nix.Eval.Operators (interpretBinop, interpretUnop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
@@ -22,8 +22,9 @@ evalApply func arg = func >>= \case
     evaluate env' body
   v -> expectedFunction v
 
-allBuiltins :: Environment
-allBuiltins = insertEnv "map" (validR $ VNative builtin_map) builtins
+-- | The initial runtime environment, populated with builtins.
+initialEnv :: Environment
+initialEnv = insertEnv "map" (validR $ VNative builtin_map) topLevelBuiltins
 
 -- | Evaluate an expression within an environment.
 evaluate :: Environment -- ^ Enclosing environment.
@@ -68,4 +69,4 @@ evaluate env expr = case expr of
 
 -- | Evaluate an expression with the builtins in scope.
 runEval :: Expression -> LazyValue
-runEval e = evaluate allBuiltins e
+runEval e = evaluate initialEnv e

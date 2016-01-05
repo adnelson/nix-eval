@@ -87,11 +87,12 @@ mkTypeTest type_ = convert . hasType type_
 
 -- | A bunch of runtime type checking tests.
 builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,
-  builtin_isBool, builtin_isNull :: Value -> LazyValue
+  builtin_isString, builtin_isBool, builtin_isNull :: Value -> LazyValue
 builtin_isAttrs = mkTypeTest RT_AttrSet
 builtin_isList = mkTypeTest RT_List
 builtin_isFunction = mkTypeTest RT_Function
 builtin_isInt = mkTypeTest RT_Int
+builtin_isString = mkTypeTest RT_String
 builtin_isBool = mkTypeTest RT_Bool
 builtin_isNull = mkTypeTest RT_Null
 
@@ -102,15 +103,79 @@ builtin_deepSeq val = case deeplyEval val of
   err@(Result (Left _)) -> \_ -> err
   _ -> id
 
--- | The set of built-in functions to add to the environment before
--- evaluation.
+-- | Throws a 'NotImplemented' error with the given name.
+notImplemented :: Text -> LazyValue
+notImplemented name = errorR (NotImplemented name)
+
+-- | The `builtins` object.
 builtins :: AttrSet
-builtins = mkEnv [ ("throw", nativeV builtin_throw)
-                 , ("seq", nativeV builtin_seq)
-                 , ("length", nativeV builtin_length)
-                 , ("isAttrs", nativeV builtin_length)
-                 , ("isList", nativeV builtin_length)
-                 , ("isFunction", nativeV builtin_length)
-                 , ("isBool", nativeV builtin_length)
-                 , ("length", nativeV builtin_length)
-                 ]
+builtins = mkEnv
+  [ ("add", nativeV $ notImplemented "add")
+  , ("all", nativeV $ notImplemented "all")
+  , ("any", nativeV $ notImplemented "any")
+  , ("attrNames", nativeV $ notImplemented "attrNames")
+  , ("attrValues", nativeV $ notImplemented "attrValues")
+  , ("compareVersions", nativeV $ notImplemented "compareVersions")
+  , ("concatLists", nativeV $ notImplemented "concatLists")
+  , ("currentSystem", nativeV $ notImplemented "currentSystem")
+  , ("deepSeq", nativeV $ notImplemented "deepSeq")
+  , ("div", nativeV $ notImplemented "div")
+  , ("elem", nativeV $ notImplemented "elem")
+  , ("elemAt", nativeV $ notImplemented "elemAt")
+  , ("fetchurl", nativeV $ notImplemented "fetchurl")
+  , ("filter", nativeV $ notImplemented "filter")
+  , ("filterSource", nativeV $ notImplemented "filterSource")
+  , ("fromJSON", nativeV $ notImplemented "fromJSON")
+  , ("genList", nativeV $ notImplemented "genList")
+  , ("getAttr", nativeV $ notImplemented "getAttr")
+  , ("getEnv", nativeV $ notImplemented "getEnv")
+  , ("hasAttr", nativeV $ notImplemented "hasAttr")
+  , ("hashString", nativeV $ notImplemented "hashString")
+  , ("head", nativeV $ notImplemented "head")
+  , ("intersectAttrs", nativeV $ notImplemented "intersectAttrs")
+  , ("isAttrs", nativeV builtin_isAttrs)
+  , ("isBool", nativeV builtin_isBool)
+  , ("isFunction", nativeV builtin_isFunction)
+  , ("isInt", nativeV builtin_isInt)
+  , ("isList", nativeV builtin_isList)
+  , ("isString", nativeV builtin_isString)
+  , ("length", nativeV builtin_length)
+  , ("lessThan", nativeV $ notImplemented "lessThan")
+  , ("listToAttrs", nativeV $ notImplemented "listToAttrs")
+  , ("mul", nativeV $ notImplemented "mul")
+  , ("parseDrvName", nativeV $ notImplemented "parseDrvName")
+  , ("pathExists", nativeV $ notImplemented "pathExists")
+  , ("readDir", nativeV $ notImplemented "readDir")
+  , ("readFile", nativeV $ notImplemented "readFile")
+  , ("replaceStrings", nativeV $ notImplemented "replaceStrings")
+  , ("seq", nativeV builtin_seq)
+  , ("sort", nativeV $ notImplemented "sort")
+  , ("stringLength", nativeV $ notImplemented "stringLength")
+  , ("sub", nativeV $ notImplemented "sub")
+  , ("substring", nativeV $ notImplemented "substring")
+  , ("tail", nativeV $ notImplemented "tail")
+  , ("toFile", nativeV $ notImplemented "toFile")
+  , ("toJSON", nativeV $ notImplemented "toJSON")
+  , ("toPath", nativeV $ notImplemented "toPath")
+  , ("toXML", nativeV $ notImplemented "toXML")
+  , ("trace", nativeV $ notImplemented "trace")
+  , ("typeOf", nativeV $ notImplemented "typeOf")
+  ]
+
+-- | The set of objects which should appear at top-level.
+topLevelBuiltins :: AttrSet
+topLevelBuiltins = mkEnv
+  [ ("abort", nativeV $ notImplemented "abort")
+  , ("builtins", VAttrSet builtins)
+  , ("baseNameOf", nativeV $ notImplemented "baseNameOf")
+  , ("derivation", nativeV $ notImplemented "derivation")
+  , ("dirOf", nativeV $ notImplemented "dirOf")
+  , ("fetchTarball", nativeV $ notImplemented "fetchTarball")
+  , ("import", nativeV $ notImplemented "import")
+  , ("isNull", nativeV builtin_isNull)
+  , ("removeAttrs", nativeV $ notImplemented "removeAttrs")
+  , ("throw", nativeV builtin_throw)
+  , ("toString", nativeV builtin_toString)
+  , ("seq", nativeV builtin_seq)
+  , ("length", nativeV builtin_length)
+  ]

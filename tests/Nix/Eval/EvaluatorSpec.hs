@@ -1,5 +1,6 @@
 module Nix.Eval.EvaluatorSpec (main, spec) where
 
+import qualified Data.HashMap.Strict as H
 import Test.Hspec
 import Test.QuickCheck (property)
 import Nix.Common
@@ -7,8 +8,8 @@ import Nix.Eval.Constants
 import Nix.Eval.Values
 import Nix.Eval.Expressions
 import Nix.Eval.TestLib
-import Nix.Eval.Builtins (builtin_throw, builtin_seq)
 import Nix.Eval.Operators (binop_div)
+import Nix.Eval.ExpectedBuiltins
 
 main :: IO ()
 main = hspec spec
@@ -25,6 +26,7 @@ spec = do
   letSpec
   listSpec
   unopsSpec
+  expectedBuiltinsSpec
 
 -- | Ensure that the failing expression fails, and succeeding
 -- expression succeeds.
@@ -279,3 +281,15 @@ unopsSpec = describe "unary operators" $ do
       notE (fromBool bool) `shouldEvalTo` fromBool (not bool)
     it "should work twice" $ property $ \bool -> do
       notE (notE (fromBool bool)) `shouldEvalTo` fromBool bool
+
+expectedBuiltinsSpec :: Spec
+expectedBuiltinsSpec = describe "primitive objects" $ do
+  describe "top-level" $ do
+    oforM_ topLevelKeys $ \key -> do
+      it ("should have key " <> unpack key <> " at top level") $ do
+        varE key `shouldNotErrorWith` ["NameError"]
+
+  describe "builtins" $ do
+    oforM_ keysInBuiltins $ \key -> do
+        it ("should have key " <> unpack key <> " under `builtins`") $ do
+          "builtins" !. key `shouldNotErrorWith` ["KeyError"]
