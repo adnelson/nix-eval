@@ -100,15 +100,26 @@ shouldError :: Expression -> Expectation
 shouldError expr = shouldBeError $ runEval expr
 
 shouldErrorWith :: Expression -> [String] -> Expectation
-shouldErrorWith = shouldErrorWithEnv allBuiltins
+shouldErrorWith = shouldErrorWithEnv initialEnv
+
+shouldNotErrorWith :: Expression -> [String] -> Expectation
+shouldNotErrorWith = shouldNotErrorWithEnv initialEnv
 
 infixl 0 `shouldErrorWith`
+infixl 0 `shouldNotErrorWith`
 
 shouldErrorWithEnv :: Environment -> Expression -> [String] -> Expectation
 shouldErrorWithEnv env expr strings =
   evaluate env expr `shouldSatisfy` \(Result res) -> case res of
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
+
+shouldNotErrorWithEnv :: Environment -> Expression -> [String] -> Expectation
+shouldNotErrorWithEnv env expr strings =
+  evaluate env expr `shouldSatisfy` \(Result res) -> case res of
+    Left err -> not $ any (`isInfixOf` show err) strings
+    _ -> True
+
 
 shouldBeValid :: Show a => Result a -> Expectation
 shouldBeValid res = shouldSatisfy res $ \case
@@ -125,6 +136,12 @@ shouldBeErrorWith res strings = shouldSatisfy res $ \case
   Result (Left err) -> all (`isInfixOf` show err) strings
   _ -> False
 
+shouldNotBeErrorWith :: Show a => Result a -> [String] -> Expectation
+shouldNotBeErrorWith res strings = shouldSatisfy res $ \case
+  Result (Left err) -> not $ any (`isInfixOf` show err) strings
+  _ -> True
+
+infixl 0 `shouldNotBeErrorWith`
 
 shouldBeNameError :: Show a => Result a -> Expectation
 shouldBeNameError res = shouldSatisfy res $ \case

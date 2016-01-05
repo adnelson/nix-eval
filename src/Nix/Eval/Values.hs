@@ -326,6 +326,8 @@ data EvalError
   -- ^ When we have some infinite loop going on.
   | AssertionError
   -- ^ When an assertion fails.
+  | NotImplemented Text
+  -- ^ For built-in functions/objects that we haven't implemented yet.
   deriving (Show, Eq, Typeable, Generic)
 
 instance NFData EvalError
