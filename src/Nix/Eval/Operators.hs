@@ -80,11 +80,11 @@ binop_update = \case
 
 -- | Equality of values.
 binop_eq :: Value -> Value -> LazyValue
-binop_eq v1 v2 = fromBool (v1 == v2)
+binop_eq v1 v2 = map fromBool $ valEqual v1 v2
 
 -- | Inequality of values.
 binop_neq :: Value -> Value -> LazyValue
-binop_neq v1 v2 = fromBool (v1 /= v2)
+binop_neq v1 v2 = map (fromBool . not) $ valEqual v1 v2
 
 -- | Translate a binary operator into a native (binary) function.
 interpretBinop :: NBinaryOp -> Native

@@ -38,13 +38,34 @@ instance Show Value where
   show (VNative (NativeValue rv)) = show rv
   show (VNative _) = "(native function)"
 
-instance Eq Value where
-  VConstant c == VConstant c' = c == c'
-  VAttrSet as == VAttrSet as' = as == as'
-  VList vs == VList vs' = vs == vs'
-  VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
-  VNative (NativeValue nv) == VNative (NativeValue nv') = nv == nv'
-  _ == _ = False
+-- | Checking value equality has to happen in the Result monad,
+-- because it might be effectful.
+valEqual :: Value -> Value -> Result Bool
+valEqual val1 val2 = case (val1, val2) of
+  (VConstant c, VConstant c') -> pure (c == c')
+  (VAttrSet lValsLeft, VAttrSet lValsRight)
+    | envSize lValsLeft /= envSize lValsRight -> pure False
+    | otherwise -> go $ envToList lValsLeft where
+        go [] = pure True
+        go ((key, lval1):rest) = case lookupEnv key lValsRight of
+          Nothing -> pure False
+          Just lval2 -> (&&) <$> lazyValEqual lval1 lval2 <*> go rest
+  (VList vs, VList vs')
+    | length vs /= length vs' -> pure False
+    | otherwise -> go $ toList $ zip vs vs' where
+        go [] = pure True
+        go ((lval1, lval2):rest) = do
+          (&&) <$> lazyValEqual lval1 lval2 <*> go rest
+  (VNative (NativeValue nv), VNative (NativeValue nv')) -> lazyValEqual nv nv'
+  _ -> pure False
+
+-- instance Eq Value where
+--   VConstant c == VConstant c' = c == c'
+--   VAttrSet as == VAttrSet as' = as == as'
+--   VList vs == VList vs' = vs == vs'
+--   VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
+--   VNative (NativeValue nv) == VNative (NativeValue nv') = nv == nv'
+--   _ == _ = False
 
 instance IsString Value where
   fromString = VConstant . fromString
@@ -62,14 +83,33 @@ instance FromConstant Value where
 -- has the effect of creating lazy evaluation, as what is /inside/ the
 -- result is not evaluated until inspected at some point.
 newtype Result a = Result (Either EvalError a)
-  deriving (Eq, Show, Functor, Applicative, Monad, Generic)
+  deriving (Show, Generic)
 
 instance NFData a => NFData (Result a)
 
--- | In practice, this is pretty much the only result type that we'll
--- use, but we want to be able to use the Result as a monad, hence the
--- @newtype@ above.
+instance Functor Result where
+  fmap f (Result r) = Result (fmap f r)
+
+instance Applicative Result where
+  pure = Result . pure
+  Result f <*> Result r = Result (f <*> r)
+
+instance Monad Result where
+  return = pure
+  Result r >>= f = Result (r >>= \x -> let Result y = f x in y)
+
+-- | In practice, this is the most common result type that we'll see.
 type LazyValue = Result Value
+
+-- | We have to check equality of lazy values in the Result monad,
+-- just as we do Values. Error values are not considered equal to each
+-- other in this context, as the concept has no meaning when there is
+-- an error.
+lazyValEqual :: LazyValue -> LazyValue -> Result Bool
+lazyValEqual res1 res2 = do
+  val1 <- res1
+  val2 <- res2
+  valEqual val1 val2
 
 instance FromConstant LazyValue where
   fromConstant = validR . fromConstant
@@ -255,7 +295,7 @@ hasType type_ x = typeOf x == type_
 -- element type is actually a @LazyValue@, so as to facilitate lazy
 -- evaluation.
 newtype Environment = Environment {eEnv :: HashMap Text (LazyValue)}
-  deriving (Eq, Generic)
+  deriving (Generic)
 
 instance NFData Environment
 
@@ -270,7 +310,7 @@ instance Show Environment where
 type AttrSet = Environment
 
 -- | A closure is an unevaluated expression, with just an environment.
-data Closure = Closure Environment Expression deriving (Eq, Generic)
+data Closure = Closure Environment Expression deriving (Generic)
 
 instance Show Closure where
   show (Closure env body) = "with " <> show env <> "; " <> show body
@@ -288,6 +328,14 @@ lookupEnv name (Environment env) = H.lookup name env
 -- | Insert a name/value into an environment.
 insertEnv :: Text -> LazyValue -> Environment -> Environment
 insertEnv name res (Environment env) = Environment $ H.insert name res env
+
+-- | Get the size of an environment.
+envSize :: Environment -> Int
+envSize (Environment env) = H.size env
+
+-- | Get the key/value pairs from an environment.
+envToList :: Environment -> [(Text, LazyValue)]
+envToList (Environment env) = H.toList env
 
 -- | Shorthand for creating an Environment from a list.
 mkEnv :: [(Text, Value)] -> Environment
@@ -326,7 +374,7 @@ data EvalError
   -- ^ When we have some infinite loop going on.
   | AssertionError
   -- ^ When an assertion fails.
-  deriving (Show, Eq, Typeable, Generic)
+  deriving (Show, Typeable, Generic)
 
 instance NFData EvalError
 

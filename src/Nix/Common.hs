@@ -8,6 +8,7 @@ module Nix.Common (
   module Data.Sequence,
   module GHC.Generics,
   module Control.DeepSeq,
+  module Control.Monad.Extra,
   pathToText
   ) where
 
@@ -22,6 +23,7 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as H
 import Data.Sequence (Seq)
 import Control.Monad.State.Strict (StateT, MonadState(..))
+import Control.Monad.Extra hiding (whenM, unlessM)
 import Data.Fix
 import GHC.Generics
 import Control.DeepSeq (NFData(..))
