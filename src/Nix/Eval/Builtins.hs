@@ -82,7 +82,7 @@ builtin_head val@(Value v) = case v of
 
 -- | Creates an `isX` function given a type to test a value against.
 mkTypeTest :: RuntimeType -> Value -> LazyValue
-mkTypeTest type_ = convert . hasType type_
+mkTypeTest type_ = map convert . hasType type_
 
 -- | A bunch of runtime type checking tests.
 builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,

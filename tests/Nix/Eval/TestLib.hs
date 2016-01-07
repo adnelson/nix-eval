@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 module Nix.Eval.TestLib where
 
 import Data.Either
@@ -45,7 +47,7 @@ instance Arbitrary Expression where
     [ EConstant <$> arbitrary
     , EList <$> arbitrary ]
 
-instance Arbitrary Value where
+instance Arbitrary a => Arbitrary (Value' a) where
   arbitrary = oneof
     [ VConstant <$> arbitrary
     , VAttrSet <$> arbitrary
@@ -53,10 +55,13 @@ instance Arbitrary Value where
     , VFunction <$> arbitrary <*> arbitrary
     , VNative <$> arbitrary ]
 
-instance Arbitrary Environment where
+instance Arbitrary Value where
+  arbitrary = Value <$> arbitrary
+
+instance Arbitrary a => Arbitrary (Environment' a) where
   arbitrary = Environment <$> arbitrary
 
-instance Arbitrary Closure where
+instance Arbitrary a => Arbitrary (Closure' a) where
   arbitrary = Closure <$> arbitrary <*> arbitrary
 
 instance Arbitrary a => Arbitrary (Result a) where
@@ -64,7 +69,7 @@ instance Arbitrary a => Arbitrary (Result a) where
     [ (10, Result . Right <$> arbitrary)
     , (1, Result . Left <$> arbitrary) ]
 
-instance Arbitrary Native where
+instance Arbitrary a => Arbitrary (Native' a) where
   arbitrary = NativeValue <$> arbitrary
 
 instance Arbitrary EvalError where

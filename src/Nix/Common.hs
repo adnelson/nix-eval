@@ -14,7 +14,7 @@ module Nix.Common (
 import ClassyPrelude hiding (assert, asList, find, FilePath, bracket,
                              maximum, maximumBy, (</>), ($>),
                              minimum, try, stripPrefix, ioError,
-                             mapM_, sequence_, foldM, forM_,
+                             mapM_, sequence_, forM_,
                              filterM, replicateM, writeFile, readFile)
 import Data.Text (Text)
 import qualified Data.Text as T

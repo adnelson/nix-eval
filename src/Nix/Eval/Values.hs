@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 module Nix.Eval.Values where
 
 import Nix.Common
@@ -26,12 +27,7 @@ data Value' v
   -- ^ Functions, with a parameter and a closure.
   | VNative (Native' v)
   -- ^ Native values, which can be either values or functions.
-  deriving (Generic)
-
--- | Strict values are fully evaluated (at least conceptually);
--- internally they only contain other strict values.
-newtype StrictValue = StrictValue (Value' StrictValue)
-  deriving (Generic, Show, Eq)
+  deriving (Generic, Functor)
 
 instance Show v => Show (Value' v) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
@@ -55,7 +51,7 @@ instance IsString (Value' v) where
 
 instance FromConstant v => FromConstant (Value' v) where
   fromConstant = VConstant
- -- fromConstants = listV . map fromConstant
+  fromConstants = VList . fromList . map fromConstant
   fromConstantSet set = VAttrSet $ Environment $ map fromConstant set
 
 -------------------------------------------------------------------------------
@@ -79,6 +75,47 @@ newtype Value = Value {
 -- error it will be a value in WHNF.
 type LazyValue = Result Value
 
+-- | Strict values are fully evaluated (at least conceptually);
+-- internally they only contain other strict values. This means, among
+-- other things, that they can be tested for equality.
+newtype StrictValue = StrictValue (Value' StrictValue)
+  deriving (Generic, Show, Eq)
+
+-- | Strict values can be converted into lazy values, since
+-- there is at that point no chance of failures.
+strictToLazy :: StrictValue -> LazyValue
+strictToLazy (StrictValue sval) = undefined
+
+-- | 'Value's and 'LazyValue's can be converted into 'StrictValue's.
+-- However, there is a chance that this conversion will fail, because
+-- the input might produce an error upon evaluation. So returning a
+-- 'Result' is best.
+valueToStrictValue :: Value -> Result StrictValue
+valueToStrictValue val = case unVal val of
+  VConstant c -> pure $ StrictValue $ VConstant c
+  VAttrSet attrs -> StrictValue . VAttrSet <$> lazyEnvToStrictEnv attrs
+  VList lvals -> StrictValue . VList <$> mapM lazyToStrict lvals
+  VFunction param (Closure env body) -> do
+    sEnv <- lazyEnvToStrictEnv env
+    return $ StrictValue $ VFunction param (Closure sEnv body)
+  VNative native -> StrictValue . VNative <$> lazyNativeToStrict native
+
+-- | Convert a lazy Environment to one containing only strict values.
+lazyEnvToStrictEnv :: Environment -> Result (Environment' StrictValue)
+lazyEnvToStrictEnv env = foldM step emptyE (envToList env) where
+  step res (name, lval) = do
+    sval <- lazyToStrict lval
+    return (insertEnv name sval res)
+
+lazyToStrict :: LazyValue -> Result StrictValue
+lazyToStrict lval = lval >>= valueToStrictValue
+
+lazyNativeToStrict :: Native -> Result (Native' StrictValue)
+lazyNativeToStrict (NativeValue lval) = NativeValue <$> lazyToStrict lval
+lazyNativeToStrict (NativeFunction _) = do
+  -- This might not be the correct approach, but it's ok for now.
+  error "Can't make strict native functions"
+
 instance FromConstant LazyValue where
   fromConstant = validR . fromConstant
   fromConstants = validR . fromConstants
@@ -86,6 +123,8 @@ instance FromConstant LazyValue where
 
 instance FromConstant Value where
   fromConstant = Value . fromConstant
+  fromConstants = Value . fromConstants
+  fromConstantSet = Value . fromConstantSet
 
 -- | Tests if a lazy value is an error (forces WHNF evaluation)
 isError :: LazyValue -> Bool
@@ -139,6 +178,11 @@ data Native' v
   | NativeFunction (v -> Native' v)
   -- ^ A function which lets us take the "next step" given a value.
   deriving (Generic)
+
+-- | This is a kind of sketchy functor instance because of the partiality.
+instance Functor Native' where
+  fmap f (NativeValue v) = NativeValue $ f v
+  fmap f (NativeFunction nf) = error "Can't map over a native function"
 
 -- | The most common use of natives is to encode lazy values.
 type Native = Native' LazyValue
@@ -203,7 +247,7 @@ attrsV = Value . VAttrSet . mkEnv
 
 -- | Create a list value.
 listV :: [Value] -> Value
-listV = Value . VList . Seq.fromList . map validR
+listV = Value . VList . fromList . map validR
 
 -- | Create a function value.
 functionV :: Text -> Closure -> Value
@@ -233,37 +277,36 @@ data RuntimeType
 instance NFData RuntimeType
 
 class HasRTType t where
-  typeOf' :: t -> Result RuntimeType
-  typeOf :: t -> RuntimeType
+  typeOf :: t -> Result RuntimeType
 
 instance HasRTType Constant where
-  typeOf' (String _) = pure RT_String
-  typeOf' (Path _) = pure RT_Path
-  typeOf' (Int _) = pure RT_Int
-  typeOf' (Bool _) = pure RT_Bool
-  typeOf' Null = pure RT_Null
+  typeOf (String _) = pure RT_String
+  typeOf (Path _) = pure RT_Path
+  typeOf (Int _) = pure RT_Int
+  typeOf (Bool _) = pure RT_Bool
+  typeOf Null = pure RT_Null
 
 instance HasRTType t => HasRTType (Result t) where
-  typeOf' res = do
-    val <- res
-    typeOf' val
+  typeOf res = res >>= typeOf
 
 instance HasRTType v => HasRTType (Native' v) where
-  typeOf' (NativeValue v) = typeOf' v
-  typeOf' (NativeFunction _) = pure RT_Function
+  typeOf (NativeValue v) = typeOf v
+  typeOf (NativeFunction _) = pure RT_Function
 
 instance HasRTType v => HasRTType (Value' v) where
-  typeOf' (VConstant constant) = typeOf' constant
-  typeOf' (VAttrSet _) = pure RT_AttrSet
-  typeOf' (VList _) = pure RT_List
-  typeOf' (VFunction _ _) = pure RT_Function
-  typeOf' (VNative n) = typeOf' n
+  typeOf (VConstant constant) = typeOf constant
+  typeOf (VAttrSet _) = pure RT_AttrSet
+  typeOf (VList _) = pure RT_List
+  typeOf (VFunction _ _) = pure RT_Function
+  typeOf (VNative n) = typeOf n
 
 instance HasRTType Value where
-  typeOf' (Value v) = typeOf' v
+  typeOf (Value v) = typeOf v
 
-hasType :: HasRTType t => RuntimeType -> t -> Bool
-hasType type_ x = typeOf x == type_
+hasType :: HasRTType t => RuntimeType -> t -> Result Bool
+hasType expectedType obj = do
+  actualType <- typeOf obj
+  return $ actualType == expectedType
 
 -------------------------------------------------------------------------------
 ------------------------------ Environments -----------------------------------
@@ -273,7 +316,7 @@ hasType type_ x = typeOf x == type_
 -- element type is actually a @LazyValue@, so as to facilitate lazy
 -- evaluation.
 newtype Environment' v = Environment {eEnv :: HashMap Text v}
-  deriving (Eq, Generic)
+  deriving (Eq, Functor, Generic)
 
 -- | We also use environments to represent attribute sets, since they
 -- have the same behavior (in fact the `with` construct makes this
@@ -293,7 +336,8 @@ instance Show v => Show (Environment' v) where
     items = intercalate "; " $ map showPair $ H.toList env
 
 -- | A closure is an unevaluated expression, with just an environment.
-data Closure' v = Closure (Environment' v) Expression deriving (Eq, Generic)
+data Closure' v = Closure (Environment' v) Expression
+  deriving (Eq, Functor, Generic)
 
 -- | The environment of most closures will be lazily evaluated.
 type Closure = Closure' LazyValue
@@ -312,6 +356,10 @@ lookupEnv name (Environment env) = H.lookup name env
 -- | Insert a name/value into an environment.
 insertEnv :: Text -> v -> Environment' v -> Environment' v
 insertEnv name res (Environment env) = Environment $ H.insert name res env
+
+-- | Convert an environment to a list of (name, v).
+envToList :: Environment' v -> [(Text, v)]
+envToList (Environment env) = H.toList env
 
 -- | Shorthand for creating an Environment from a list.
 mkEnv :: [(Text, Value)] -> Environment
@@ -371,8 +419,9 @@ expectedTheType t butGot = TypeError (S.singleton t) butGot
 
 -- | Throw a type error when expecting a single type.
 throwExpectedType :: HasRTType t => RuntimeType -> t -> Result a
-throwExpectedType expected val =
-  errorR $ expectedTheType expected (typeOf val)
+throwExpectedType expected val = do
+  actual <- typeOf val
+  errorR $ expectedTheType expected actual
 
 -- | When expecting a function.
 expectedFunction :: HasRTType t => t -> Result a
@@ -401,5 +450,5 @@ expectedBool = throwExpectedType RT_Bool
 -- | When expecting one of a set of types..
 expectedOneOf :: HasRTType t => [RuntimeType] -> t -> Result a
 expectedOneOf types val = do
-  actualType <- typeOf' val
+  actualType <- typeOf val
   errorR $ TypeError (S.fromList types) actualType
