@@ -19,65 +19,64 @@ constantToEnvString (Bool False) = ""
 constantToEnvString Null = ""
 
 -- | Convert a value to a env-variable-compatible string.
-valueToEnvString :: Value -> Either EvalError Text
-valueToEnvString (VConstant c) = pure $ constantToEnvString c
-valueToEnvString (VList vals) = do
-  strings <- forM vals $ \(Result res) -> case res of
-    Left err -> Left err
-    Right val -> valueToEnvString val
-  pure $ intercalate " " $ toList strings
-valueToEnvString v = do
-  let types = [RT_String, RT_Path, RT_Bool, RT_Int, RT_Null, RT_List]
-  Left $ TypeError (S.fromList types) (typeOf v)
+valueToEnvString :: Value -> Result Text
+valueToEnvString val = case unVal val of
+  VConstant c -> pure $ constantToEnvString c
+  VList vals -> do
+    strings <- forM vals $ \lazyVal -> do
+      val <- lazyVal
+      valueToEnvString val
+    pure $ intercalate " " $ toList strings
+  _ -> do
+    let types = [RT_String, RT_Path, RT_Bool, RT_Int, RT_Null, RT_List]
+    expectedOneOf types val
 
 -- | Convert a value to a string.
 builtin_toString :: Value -> LazyValue
-builtin_toString val = case valueToEnvString val of
-  Left err -> errorR err
-  Right str -> validR $ strV str
+builtin_toString val = map strV $ valueToEnvString val
 
 builtin_seq :: Value -> LazyValue -> LazyValue
 builtin_seq = seq
 
 -- | The throw function forces an error to occur.
 builtin_throw :: Value -> LazyValue
-builtin_throw = \case
+builtin_throw val = case unVal val of
   VConstant (String msg) -> errorR $ CustomError msg
-  v -> expectedString v
+  _ -> expectedString val
 
 -- | Asserts its first argument is true, and then returns its second.
 builtin_assert :: Value -> LazyValue -> LazyValue
-builtin_assert val res = case val of
+builtin_assert val res = case unVal val of
   VConstant (Bool True) -> res
   VConstant (Bool False) -> errorR AssertionError
-  v -> expectedBool v
+  _ -> expectedBool val
 
 -- | Get the length of a list.
 builtin_length :: Value -> LazyValue
-builtin_length = \case
+builtin_length val = case unVal val of
   VList vals -> validR $ fromInt (length vals)
   v -> expectedList v
 
 -- | Add to the front of a list.
 builtin_cons :: LazyValue -> Value -> LazyValue
-builtin_cons val = \case
-  VList list -> validR $ VList $ (val `cons` list)
-  v -> expectedList v
+builtin_cons val v = case unVal v of
+  VList list -> validR $ Value $ VList $ (val `cons` list)
+  _ -> expectedList v
 
 -- | Index into list. The list is the first argument.
 builtin_elemAt :: Value -> Value -> LazyValue
-builtin_elemAt val1 val2 = case val1 of
-  VList list -> case val2 of
+builtin_elemAt val1 val2 = case unVal val1 of
+  VList list -> case unVal val2 of
     VConstant (Int i) | i < 0 -> errorR $ IndexError i (length list)
     VConstant (Int i) -> case list `index` fromIntegral i of
       Nothing -> errorR $ IndexError i (length list)
       Just val -> val
-    v -> expectedInt v
+    _ -> expectedInt val2
   _ -> expectedList val1
 
 -- | Get the head of a list.
 builtin_head :: Value -> LazyValue
-builtin_head val = case val of
+builtin_head val@(Value v) = case v of
   VList _ -> builtin_elemAt val (fromInt 0)
   _ -> expectedList val
 

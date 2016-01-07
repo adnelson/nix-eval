@@ -32,3 +32,6 @@ pathToText :: FilePath -> Text
 pathToText pth = case toText pth of
   Left p -> p
   Right p -> p
+
+(.>) :: (a -> b) -> (b -> c) -> (a -> c)
+(.>) = flip (.)

@@ -13,23 +13,27 @@ import qualified Data.Sequence as Seq
 --------------------------------- Values --------------------------------------
 -------------------------------------------------------------------------------
 
--- | The type of runtime values.
-data Value
+-- | The type of runtime values. Is polymorphic over what type appears
+-- in recursive variants such as environments and lists.
+data Value' v
   = VConstant Constant
   -- ^ Constant values (isomorphic to constant expressions).
-  | VAttrSet AttrSet
+  | VAttrSet (AttrSet' v)
   -- ^ Attribute set values.
-  | VList (Seq LazyValue)
+  | VList (Seq v)
   -- ^ List values.
-  | VFunction Text Closure
+  | VFunction Text (Closure' v)
   -- ^ Functions, with a parameter and a closure.
-  | VNative Native
+  | VNative (Native' v)
   -- ^ Native values, which can be either values or functions.
   deriving (Generic)
 
-instance NFData Value
+-- | Strict values are fully evaluated (at least conceptually);
+-- internally they only contain other strict values.
+newtype StrictValue = StrictValue (Value' StrictValue)
+  deriving (Generic, Show, Eq)
 
-instance Show Value where
+instance Show v => Show (Value' v) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
   show (VAttrSet s) = show s
   show (VList vs) = show vs
@@ -38,7 +42,7 @@ instance Show Value where
   show (VNative (NativeValue rv)) = show rv
   show (VNative _) = "(native function)"
 
-instance Eq Value where
+instance Eq v => Eq (Value' v) where
   VConstant c == VConstant c' = c == c'
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = vs == vs'
@@ -46,12 +50,12 @@ instance Eq Value where
   VNative (NativeValue nv) == VNative (NativeValue nv') = nv == nv'
   _ == _ = False
 
-instance IsString Value where
+instance IsString (Value' v) where
   fromString = VConstant . fromString
 
-instance FromConstant Value where
+instance FromConstant v => FromConstant (Value' v) where
   fromConstant = VConstant
-  fromConstants = listV . map fromConstant
+ -- fromConstants = listV . map fromConstant
   fromConstantSet set = VAttrSet $ Environment $ map fromConstant set
 
 -------------------------------------------------------------------------------
@@ -64,17 +68,24 @@ instance FromConstant Value where
 newtype Result a = Result (Either EvalError a)
   deriving (Eq, Show, Functor, Applicative, Monad, Generic)
 
-instance NFData a => NFData (Result a)
+-- | Weak-head-normal-form values are strict at the top-level, but
+-- internally may contain lazily evaluated values.
+newtype Value = Value {
+  unVal :: Value' LazyValue
+  } deriving (Show, Eq)
 
--- | In practice, this is pretty much the only result type that we'll
--- use, but we want to be able to use the Result as a monad, hence the
--- @newtype@ above.
+-- | This is how we represent a lazily evaluated value: It's a
+-- 'Result', which means it might be an error; but if it's not an
+-- error it will be a value in WHNF.
 type LazyValue = Result Value
 
 instance FromConstant LazyValue where
   fromConstant = validR . fromConstant
   fromConstants = validR . fromConstants
   fromConstantSet = validR . fromConstantSet
+
+instance FromConstant Value where
+  fromConstant = Value . fromConstant
 
 -- | Tests if a lazy value is an error (forces WHNF evaluation)
 isError :: LazyValue -> Bool
@@ -93,7 +104,7 @@ unwrapAndApply = (=<<)
 -- | Most of the time we evaluate things lazily, but sometimes we want
 -- to be able to evaluate strictly (esp. in the `deepSeq` function).
 deeplyEval :: Value -> LazyValue
-deeplyEval v = case v of
+deeplyEval v@(Value val) = case val of
   VNative (NativeValue lval) -> deeplyEvalLazy lval
   VList lvals -> do
     -- Recur on items of the list, and check if any are errors.
@@ -110,6 +121,7 @@ deeplyEval v = case v of
   -- since constants can't fail there's no need to handle them either.
   _ -> validR v
 
+-- | Deeply evaluate a lazy value, while keeping it appearing as lazy.
 deeplyEvalLazy :: LazyValue -> LazyValue
 deeplyEvalLazy err@(Result (Left _)) = err
 deeplyEvalLazy (Result (Right v)) = deeplyEval v
@@ -121,14 +133,15 @@ deeplyEvalLazy (Result (Right v)) = deeplyEval v
 
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
-data Native
-  = NativeValue LazyValue
-  -- ^ A terminal value (or an error)
-  | NativeFunction (LazyValue -> Native)
+data Native' v
+  = NativeValue v
+  -- ^ A terminal value
+  | NativeFunction (v -> Native' v)
   -- ^ A function which lets us take the "next step" given a value.
   deriving (Generic)
 
-instance NFData Native
+-- | The most common use of natives is to encode lazy values.
+type Native = Native' LazyValue
 
 -- | Types which can be turned into 'Native' values.
 class Natify t where
@@ -136,7 +149,7 @@ class Natify t where
 
 -- | Of course, this applies to lazy values.
 instance Natify LazyValue where
-  natify res = NativeValue res
+  natify = NativeValue
 
 -- | This is where things get interesting: a 'Natify' instance for
 -- functions on lazy values lets us embed any function on 'LazyValue's
@@ -152,7 +165,7 @@ instance Natify t => Natify (LazyValue -> t) where
 -- value is to evaluate the 'Result' wrapper to WHNF.
 instance Natify t => Natify (Value -> t) where
   natify function = NativeFunction $ \(Result res) -> case res of
-    Left err -> natify $ errorR err
+    Left err -> NativeValue $ errorR err
     Right val -> natify $ function val
 
 -- | Apply a native value as if it were a function, to zero or more arguments.
@@ -166,7 +179,7 @@ applyNative native (rval:rvals) = case native of
 -- 'VNative' constructor, if the object is not a 'NativeValue'.
 unwrapNative :: Native -> LazyValue
 unwrapNative (NativeValue rv) = rv
-unwrapNative n = validR $ VNative n
+unwrapNative n = validR $ Value $ VNative n
 
 -- | Create a value from a string.
 strV :: Text -> Value
@@ -186,19 +199,19 @@ nullV = fromConstant Null
 
 -- | Create an attribute set value.
 attrsV :: [(Text, Value)] -> Value
-attrsV = VAttrSet . mkEnv
+attrsV = Value . VAttrSet . mkEnv
 
 -- | Create a list value.
 listV :: [Value] -> Value
-listV = VList . Seq.fromList . map validR
+listV = Value . VList . Seq.fromList . map validR
 
 -- | Create a function value.
 functionV :: Text -> Closure -> Value
-functionV param body = VFunction param body
+functionV param body = Value $ VFunction param body
 
 -- | Create a native value.
 nativeV :: Natify n => n -> Value
-nativeV = VNative . natify
+nativeV = Value . VNative . natify
 
 -------------------------------------------------------------------------------
 ------------------------------- Value Types -----------------------------------
@@ -220,29 +233,34 @@ data RuntimeType
 instance NFData RuntimeType
 
 class HasRTType t where
+  typeOf' :: t -> Result RuntimeType
   typeOf :: t -> RuntimeType
 
 instance HasRTType Constant where
-  typeOf (String _) = RT_String
-  typeOf (Path _) = RT_Path
-  typeOf (Int _) = RT_Int
-  typeOf (Bool _) = RT_Bool
-  typeOf Null = RT_Null
+  typeOf' (String _) = pure RT_String
+  typeOf' (Path _) = pure RT_Path
+  typeOf' (Int _) = pure RT_Int
+  typeOf' (Bool _) = pure RT_Bool
+  typeOf' Null = pure RT_Null
 
 instance HasRTType t => HasRTType (Result t) where
-  typeOf (Result (Left _)) = RT_Error
-  typeOf (Result (Right x)) = typeOf x
+  typeOf' res = do
+    val <- res
+    typeOf' val
 
-instance HasRTType Native where
-  typeOf (NativeValue v) = typeOf v
-  typeOf (NativeFunction _) = RT_Function
+instance HasRTType v => HasRTType (Native' v) where
+  typeOf' (NativeValue v) = typeOf' v
+  typeOf' (NativeFunction _) = pure RT_Function
+
+instance HasRTType v => HasRTType (Value' v) where
+  typeOf' (VConstant constant) = typeOf' constant
+  typeOf' (VAttrSet _) = pure RT_AttrSet
+  typeOf' (VList _) = pure RT_List
+  typeOf' (VFunction _ _) = pure RT_Function
+  typeOf' (VNative n) = typeOf' n
 
 instance HasRTType Value where
-  typeOf (VConstant constant) = typeOf constant
-  typeOf (VAttrSet _) = RT_AttrSet
-  typeOf (VList _) = RT_List
-  typeOf (VFunction _ _) = RT_Function
-  typeOf (VNative n) = typeOf n
+  typeOf' (Value v) = typeOf' v
 
 hasType :: HasRTType t => RuntimeType -> t -> Bool
 hasType type_ x = typeOf x == type_
@@ -254,39 +272,45 @@ hasType type_ x = typeOf x == type_
 -- | An environment is conceptually just a name -> value mapping, but the
 -- element type is actually a @LazyValue@, so as to facilitate lazy
 -- evaluation.
-newtype Environment = Environment {eEnv :: HashMap Text (LazyValue)}
+newtype Environment' v = Environment {eEnv :: HashMap Text v}
   deriving (Eq, Generic)
 
-instance NFData Environment
+-- | We also use environments to represent attribute sets, since they
+-- have the same behavior (in fact the `with` construct makes this
+-- correspondence explicit).
+type AttrSet' = Environment'
+
+-- | Usually environments will contain LazyValues.
+type Environment = Environment' LazyValue
+
+-- | And so will attribute sets.
+type AttrSet = AttrSet' LazyValue
 
 -- | We use a nix-esque syntax for showing an environment.
-instance Show Environment where
+instance Show v => Show (Environment' v) where
   show (Environment env) = "{" <> items <> "}" where
     showPair (n, v) = unpack n <> " = " <> show v
     items = intercalate "; " $ map showPair $ H.toList env
 
--- | We also use environments to represent attribute sets, since those
--- are lazily evaluated.
-type AttrSet = Environment
-
 -- | A closure is an unevaluated expression, with just an environment.
-data Closure = Closure Environment Expression deriving (Eq, Generic)
+data Closure' v = Closure (Environment' v) Expression deriving (Eq, Generic)
 
-instance Show Closure where
+-- | The environment of most closures will be lazily evaluated.
+type Closure = Closure' LazyValue
+
+instance Show v => Show (Closure' v) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
 
-instance NFData Closure
-
 -- | Union two environments. Left-biased.
-unionEnv :: Environment -> Environment -> Environment
+unionEnv :: Environment' v -> Environment' v -> Environment' v
 unionEnv (Environment e1) (Environment e2) = Environment (e1 `union` e2)
 
 -- | Look up a name in an environment.
-lookupEnv :: Text -> Environment -> Maybe (LazyValue)
+lookupEnv :: Text -> Environment' v -> Maybe v
 lookupEnv name (Environment env) = H.lookup name env
 
 -- | Insert a name/value into an environment.
-insertEnv :: Text -> LazyValue -> Environment -> Environment
+insertEnv :: Text -> v -> Environment' v -> Environment' v
 insertEnv name res (Environment env) = Environment $ H.insert name res env
 
 -- | Shorthand for creating an Environment from a list.
@@ -294,26 +318,26 @@ mkEnv :: [(Text, Value)] -> Environment
 mkEnv = Environment . H.fromList . map (map validR)
 
 -- | Empty environment.
-emptyE :: Environment
-emptyE = mkEnv []
+emptyE :: Environment' v
+emptyE = Environment mempty
 
 -- | Shorthand to create a closure from a list and an expression.
 mkClosure :: [(Text, Value)] -> Expression -> Closure
 mkClosure env expr = Closure (mkEnv env) expr
 
 -- | An empty closure.
-emptyC :: Expression -> Closure
-emptyC = mkClosure []
+emptyC :: Expression -> Closure' v
+emptyC = Closure emptyE
 
 -------------------------------------------------------------------------------
 --------------------------------- Errors --------------------------------------
 -------------------------------------------------------------------------------
 
 -- | The type of errors which can occur during evaluation.
-data EvalError
-  = NameError Text Environment
+data EvalError' v
+  = NameError Text (Environment' v)
   -- ^ If we attempt to evaluate an undefined variable.
-  | KeyError Text AttrSet
+  | KeyError Text (AttrSet' v)
   -- ^ If we attempt to grab a key which doesn't exist in a set.
   | IndexError Integer Int
   | TypeError (Set RuntimeType) RuntimeType
@@ -328,16 +352,14 @@ data EvalError
   -- ^ When an assertion fails.
   deriving (Show, Eq, Typeable, Generic)
 
-instance NFData EvalError
-
-instance Exception EvalError
+type EvalError = EvalError' LazyValue
 
 -- | Wrap a value in a result.
 validR :: Value -> LazyValue
 validR = Result . Right
 
 -- | Wrap an error in a result.
-errorR :: EvalError -> LazyValue
+errorR :: EvalError -> Result a
 errorR = Result . Left
 
 -- | When expecting a single type.
@@ -345,35 +367,36 @@ expectedTheType :: RuntimeType -> RuntimeType -> EvalError
 expectedTheType t butGot = TypeError (S.singleton t) butGot
 
 -- | Throw a type error when expecting a single type.
-throwExpectedType :: HasRTType t => RuntimeType -> t -> LazyValue
+throwExpectedType :: HasRTType t => RuntimeType -> t -> Result a
 throwExpectedType expected val =
   errorR $ expectedTheType expected (typeOf val)
 
 -- | When expecting a function.
-expectedFunction :: HasRTType t => t -> LazyValue
+expectedFunction :: HasRTType t => t -> Result a
 expectedFunction = throwExpectedType RT_Function
 
 -- | When expecting a string.
-expectedString :: HasRTType t => t -> LazyValue
+expectedString :: HasRTType t => t -> Result a
 expectedString = throwExpectedType RT_String
 
 -- | When expecting an integer.
-expectedInt :: HasRTType t => t -> LazyValue
+expectedInt :: HasRTType t => t -> Result a
 expectedInt = throwExpectedType RT_Int
 
 -- | When expecting a list.
-expectedList :: HasRTType t => t -> LazyValue
+expectedList :: HasRTType t => t -> Result a
 expectedList = throwExpectedType RT_List
 
 -- | When expecting an attribute set.
-expectedAttrs :: HasRTType t => t -> LazyValue
+expectedAttrs :: HasRTType t => t -> Result a
 expectedAttrs = throwExpectedType RT_AttrSet
 
 -- | When expecting a boolean.
-expectedBool :: HasRTType t => t -> LazyValue
+expectedBool :: HasRTType t => t -> Result a
 expectedBool = throwExpectedType RT_Bool
 
 -- | When expecting one of a set of types..
-expectedOneOf :: HasRTType t => [RuntimeType] -> t -> LazyValue
-expectedOneOf types val =
-  errorR $ TypeError (S.fromList types) $ typeOf val
+expectedOneOf :: HasRTType t => [RuntimeType] -> t -> Result a
+expectedOneOf types val = do
+  actualType <- typeOf' val
+  errorR $ TypeError (S.fromList types) actualType
