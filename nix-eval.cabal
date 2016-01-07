@@ -39,6 +39,7 @@ library
                      , GADTs
                      , DeriveGeneric
                      , ScopedTypeVariables
+                     , MultiParamTypeClasses
   other-extensions:    FlexibleInstances, TypeSynonymInstances
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports
 
