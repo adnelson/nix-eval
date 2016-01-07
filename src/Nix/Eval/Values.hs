@@ -358,6 +358,9 @@ type EvalError = EvalError' LazyValue
 validR :: Value -> LazyValue
 validR = Result . Right
 
+validR' :: Value' LazyValue -> LazyValue
+validR' = validR . Value
+
 -- | Wrap an error in a result.
 errorR :: EvalError -> Result a
 errorR = Result . Left
