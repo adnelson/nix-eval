@@ -16,7 +16,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Nix.Eval
+  exposed-modules:     Nix.Eval, Nix.Testing
   other-modules:       Nix.Eval.Evaluator
                      , Nix.Eval.Values
                      , Nix.Eval.Expressions

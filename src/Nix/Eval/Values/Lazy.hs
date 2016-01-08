@@ -8,8 +8,6 @@ import Nix.Eval.Values.Generic
 import qualified Data.HashMap.Strict as H
 
 
-type Result = Result' LazyValue
-
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally may contain lazily evaluated values.
 newtype Value = Value {
@@ -22,6 +20,9 @@ newtype Value = Value {
 newtype LazyValue = LazyValue {
   unLVal :: Result Value
   } deriving (Show, Eq)
+
+-- | Most results we care about are those containing lazy values.
+type Result = Result' LazyValue
 
 -- | The most common use of natives is to encode lazy values.
 type Native = Native' LazyValue
@@ -115,9 +116,16 @@ instance Natify t => Natify (LazyValue -> t) where
 -- forcing strict evaluation, as the only way to extract the inner
 -- value is to evaluate the 'Result' wrapper to WHNF.
 instance (Natify a, Natify b) => Natify (a -> b) where
-  natify function = NativeFunction $ \res -> do
-    val <- natify res
-    return $ natify $ function val
+  natify function = do
+    NativeFunction $ \x -> do
+      let y = natify (function x)
+      _what
+
+    -- NativeFunction $ \res -> do
+    -- let nRes = natify res
+    -- val <- _huh
+    -- let newRes = natify $ function val
+    -- _what
 
 -------------------------------------------------------------------------------
 --------------------------- Deep Evaluation -----------------------------------
