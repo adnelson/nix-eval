@@ -6,16 +6,20 @@ import Nix.Common
 import Nix.Eval.Expressions
 import Nix.Eval.Constants
 import Nix.Eval.Values.Generic
-import Control.Monad.Except
 import qualified Data.HashMap.Strict as H
 
 -- | The result of evaluation: it might be an error.
-newtype Eval a = Eval (ExceptT (EvalError Eval) IO a)
+newtype Eval a = Eval {runEval :: ExceptT (EvalError Eval) IO a}
   deriving (Functor, Applicative, Monad)
+
+run :: Eval a -> IO (Either (EvalError Eval) a)
+run (Eval r) = runExceptT r
 
 instance MonadError (EvalError Eval) Eval where
   throwError = Eval . throwError
   catchError (Eval e) handler = undefined
+
+instance Context Eval
 
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally contains lazily evaluated values.

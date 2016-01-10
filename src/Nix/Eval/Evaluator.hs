@@ -2,8 +2,7 @@ module Nix.Eval.Evaluator where
 
 import Nix.Common hiding (trace)
 import Nix.Eval.Constants
-import Nix.Eval.Builtins (builtins)
-import Nix.Eval.Operators (interpretBinop, interpretUnop)
+import Nix.Eval.Values.Builtins (builtins, interpretBinop, interpretUnop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
 

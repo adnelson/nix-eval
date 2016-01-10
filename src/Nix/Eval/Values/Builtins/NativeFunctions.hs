@@ -1,4 +1,4 @@
-module Nix.Eval.Builtins where
+module Nix.Eval.Values.Builtins.NativeFunctions where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
@@ -19,8 +19,8 @@ constantToEnvString (Bool False) = ""
 constantToEnvString Null = ""
 
 -- | Convert a value to a env-variable-compatible string.
-valueToEnvString :: Value -> Result Text
-valueToEnvString val = case unVal val of
+valueToEnvString :: WHNFValue -> Eval Text
+valueToEnvString val = case val of
   VConstant c -> pure $ constantToEnvString c
   VList vals -> do
     strings <- forM vals $ \lazyVal -> do
@@ -32,41 +32,41 @@ valueToEnvString val = case unVal val of
     expectedOneOf types val
 
 -- | Convert a value to a string.
-builtin_toString :: Value -> LazyValue
+builtin_toString :: WHNFValue -> LazyValue
 builtin_toString val = map strV $ valueToEnvString val
 
-builtin_seq :: Value -> LazyValue -> LazyValue
+builtin_seq :: WHNFValue -> LazyValue -> LazyValue
 builtin_seq = seq
 
 -- | The throw function forces an error to occur.
-builtin_throw :: Value -> LazyValue
-builtin_throw val = case unVal val of
+builtin_throw :: WHNFValue -> LazyValue
+builtin_throw val = case val of
   VConstant (String msg) -> errorR $ CustomError msg
   _ -> expectedString val
 
 -- | Asserts its first argument is true, and then returns its second.
-builtin_assert :: Value -> LazyValue -> LazyValue
-builtin_assert val res = case unVal val of
+builtin_assert :: WHNFValue -> LazyValue -> LazyValue
+builtin_assert val res = case val of
   VConstant (Bool True) -> res
   VConstant (Bool False) -> errorR AssertionError
   _ -> expectedBool val
 
 -- | Get the length of a list.
-builtin_length :: Value -> LazyValue
-builtin_length val = case unVal val of
+builtin_length :: WHNFValue -> LazyValue
+builtin_length val = case val of
   VList vals -> validR $ fromInt (length vals)
   v -> expectedList v
 
 -- | Add to the front of a list.
-builtin_cons :: LazyValue -> Value -> LazyValue
-builtin_cons val v = case unVal v of
-  VList list -> validR $ Value $ VList $ (val `cons` list)
+builtin_cons :: LazyValue -> WHNFValue -> LazyValue
+builtin_cons val v = case v of
+  VList list -> validR $ VList $ (val `cons` list)
   _ -> expectedList v
 
 -- | Index into list. The list is the first argument.
-builtin_elemAt :: Value -> Value -> LazyValue
-builtin_elemAt val1 val2 = case unVal val1 of
-  VList list -> case unVal val2 of
+builtin_elemAt :: WHNFValue -> WHNFValue -> LazyValue
+builtin_elemAt val1 val2 = case val1 of
+  VList list -> case val2 of
     VConstant (Int i) | i < 0 -> errorR $ IndexError i (length list)
     VConstant (Int i) -> case list `index` fromIntegral i of
       Nothing -> errorR $ IndexError i (length list)
@@ -75,18 +75,18 @@ builtin_elemAt val1 val2 = case unVal val1 of
   _ -> expectedList val1
 
 -- | Get the head of a list.
-builtin_head :: Value -> LazyValue
-builtin_head val@(Value v) = case v of
+builtin_head :: WHNFValue -> LazyValue
+builtin_head val = case val of
   VList _ -> builtin_elemAt val (fromInt 0)
   _ -> expectedList val
 
 -- | Creates an `isX` function given a type to test a value against.
-mkTypeTest :: RuntimeType -> Value -> LazyValue
+mkTypeTest :: RuntimeType -> WHNFValue -> LazyValue
 mkTypeTest type_ = map convert . hasType type_
 
 -- | A bunch of runtime type checking tests.
 builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,
-  builtin_isBool, builtin_isNull :: Value -> LazyValue
+  builtin_isBool, builtin_isNull :: WHNFValue -> LazyValue
 builtin_isAttrs = mkTypeTest RT_AttrSet
 builtin_isList = mkTypeTest RT_List
 builtin_isFunction = mkTypeTest RT_Function
@@ -96,11 +96,22 @@ builtin_isNull = mkTypeTest RT_Null
 
 -- | Deeply evaluate the first argument, and return the second if it's
 -- the first has no errors; else error.
-builtin_deepSeq :: Value -> LazyValue -> LazyValue
-builtin_deepSeq val = case deeplyEval val of
-  err@(Result (Left _)) -> \_ -> err
-  _ -> id
+builtin_deepSeq :: WHNFValue -> LazyValue -> LazyValue
+builtin_deepSeq val x = deeplyEval val >> x
 
+n_head :: LNative (WHNFValue -> WHNFValue)
+n_head = NativeFunction $ map (NativeValue . builtin_head)
+
+
+-- lvalToNative :: (WHNFValue -> t) -> LNative (WHNFValue -> t)
+-- lvalToNative func = NativeFunction $ \lval -> do
+--   -- Pull a value out of the lazy value
+--   val <- lval
+--   -- Apply the function to the value
+--   let res = func val
+--   _what
+
+{-
 -- | The set of built-in functions to add to the environment before
 -- evaluation.
 builtins :: AttrSet
@@ -113,3 +124,6 @@ builtins = mkEnv [ ("throw", nativeV builtin_throw)
                  , ("isBool", nativeV builtin_length)
                  , ("length", nativeV builtin_length)
                  ]
+
+
+-}

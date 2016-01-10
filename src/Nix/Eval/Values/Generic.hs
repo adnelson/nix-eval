@@ -2,8 +2,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE InstanceSigs #-}
 module Nix.Eval.Values.Generic where
 
 import Nix.Common
@@ -24,15 +26,12 @@ data Value m
   -- ^ Constant values (isomorphic to constant expressions).
   | VAttrSet (AttrSet m)
   -- ^ Attribute set values.
-  | VList (Seq (MValue m))
+  | VList (Seq (m (Value m)))
   -- ^ List values.
   | VFunction Text (Closure m)
   -- ^ Functions, with a parameter and a closure.
   | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
-
--- | A 'Value' wrapped in its monadic context.
-type MValue m = m (Value m)
 
 instance Extract m => Show (Value m) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
@@ -67,18 +66,37 @@ instance Monad m => FromConstant (Value m) where
 
 -- | An environment is conceptually just a name -> value mapping, but the
 -- element type is parametric to allow usage of different kinds of values.
-newtype Environment m = Environment {eEnv :: HashMap Text (MValue m)}
+newtype Environment m = Environment {eEnv :: HashMap Text (m (Value m))}
 
 instance Extract m => Eq (Environment m) where
   Environment e1 == Environment e2 = map extract e1 == map extract e2
+
+instance MonadIO io => ShowIO (Value io) io where
+  showIO (VConstant c) = return $ "VConstant (" <> tshow c <> ")"
+  showIO (VAttrSet set) = showIO set
+  showIO (VList vs) = showIO vs
+  showIO (VFunction param closure) = do
+    closureRep <- showIO closure
+    return $ concat [ param, " => (", closureRep, ")"]
+  showIO (VNative (NativeValue v)) = showIO v
+  showIO (VNative _) = return "(native function)"
+
+-- | We use a nix-esque syntax for showing an environment.
+instance MonadIO io => ShowIO (Environment io) io where
+  showIO (Environment env) = do
+    items <- showItems
+    return ("{" <> items <> "}")
+    where
+      showPair (n, v) = showIO v >>= \v' -> return (n <> " = " <> v')
+      showItems = intercalate "; " <$> mapM showPair (H.toList env)
 
 -- | We also use environments to represent attribute sets, since they
 -- have the same behavior (in fact the `with` construct makes this
 -- correspondence explicit).
 type AttrSet = Environment
 
--- | We use a nix-esque syntax for showing an environment.
-instance (Extract m) => Show (Environment m) where
+-- | We can show an environment purely if the context implements extract.
+instance (Extract ctx) => Show (Environment ctx) where
   show (Environment env) = "{" <> items <> "}" where
     showPair (n, v) = unpack n <> " = " <> show (extract v)
     items = intercalate "; " $ map showPair $ H.toList env
@@ -86,6 +104,11 @@ instance (Extract m) => Show (Environment m) where
 -- | A closure is an unevaluated expression, with just an environment.
 data Closure m = Closure (Environment m) Expression
   deriving (Eq, Generic)
+
+instance MonadIO io => ShowIO (Closure io) io where
+  showIO (Closure env body) = do
+    envRep <- showIO env
+    return $ "with " <> envRep <> "; " <> tshow body
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
@@ -95,7 +118,7 @@ unionEnv :: Environment m -> Environment m -> Environment m
 unionEnv (Environment e1) (Environment e2) = Environment (e1 `union` e2)
 
 -- | Look up a name in an environment.
-lookupEnv :: Text -> Environment m -> Maybe (MValue m)
+lookupEnv :: Text -> Environment m -> Maybe (m (Value m))
 lookupEnv name (Environment env) = H.lookup name env
 
 -- | Insert a name/value into an environment.
@@ -104,7 +127,7 @@ insertEnv name v (Environment env) = Environment $
   H.insert name (return v) env
 
 -- | Convert an environment to a list of (name, v).
-envToList :: Environment m -> [(Text, MValue m)]
+envToList :: Environment m -> [(Text, m (Value m))]
 envToList (Environment env) = H.toList env
 
 -- | An empty environment.
@@ -122,7 +145,7 @@ emptyC = Closure emptyE
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
 data Native (m :: (* -> *)) :: * -> * where
-  NativeValue :: MValue m -> Native m (MValue m)
+  NativeValue :: m (Value m) -> Native m (Value m)
   -- ^ A terminal value (which has not necessarily been evaluated).
   NativeFunction :: (m v1 -> m (Native m v2)) -> Native m (v1 -> v2)
   -- ^ A function which lets us take the "next step" given a value.
@@ -133,26 +156,12 @@ data Native (m :: (* -> *)) :: * -> * where
 applyNative :: Native m (a -> b) -> m a -> m (Native m b)
 applyNative (NativeFunction func) arg = func arg
 
-unwrapNative :: Monad m => Native m v -> MValue m
+unwrapNative :: Monad m => Native m v -> m (Value m)
 unwrapNative (NativeValue v) = v
 unwrapNative n = return $ VNative n
 
--- -- | The relation @Natify t m@ states that given a value of type @t@,
--- -- I can produce a value of type @Native v@ in the context @m@, where
--- -- @v@ is the result of evaluating @t@.
--- class Natify t m where
---   type EvalResult t :: *
---   natify :: t -> Native m (EvalResult t)
-
--- -- | This states the (obvious) fact that given a native, I can produce
--- -- another native value of the same type.
--- instance Natify (Native m v) m where
---   type EvalResult (Native m v) = v
--- --  type EvalMonad (Native m v) = m
---   natify = id
-
 -------------------------------------------------------------------------------
-------------------------------- Value Types -----------------------------------
+-- Value Types ----------------------------------------------------------------
 -------------------------------------------------------------------------------
 
 -- | Runtime types of values.
@@ -169,8 +178,9 @@ data RuntimeType
 
 instance NFData RuntimeType
 
-class Monad m => Context m where
-  errorR :: EvalError v -> m a
+class (MonadError (EvalError m) m) => Context m where
+  errorR :: EvalError m -> m a
+  errorR = throwError
 
 -- | Things that have runtime types. Those types are discovered
 -- through some computation context @m@ (which must be a monad, since
@@ -207,7 +217,7 @@ hasType expectedType obj = do
   return $ actualType == expectedType
 
 -------------------------------------------------------------------------------
---------------------------------- Errors --------------------------------------
+-- Errors ---------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
 -- | The type of errors which can occur during evaluation.
@@ -217,6 +227,7 @@ data EvalError m
   | KeyError Text (AttrSet m)
   -- ^ If we attempt to grab a key which doesn't exist in a set.
   | IndexError Integer Int
+  -- ^ If we try to index into a list which is too short.
   | TypeError (Set RuntimeType) RuntimeType
   -- ^ Type-related errors.
   | DivideByZero

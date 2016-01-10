@@ -1,4 +1,4 @@
-module Nix.Eval.Operators where
+module Nix.Eval.Values.Builtins.Operators where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))

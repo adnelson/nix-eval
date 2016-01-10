@@ -9,40 +9,50 @@ import Nix.Eval.Values.Lazy
 -- | Strict values are fully evaluated (at least conceptually);
 -- internally they only contain other strict values. This means, among
 -- other things, that they can be tested for equality.
-newtype StrictValue = StrictValue (Value' StrictValue)
-  deriving (Generic, Show, Eq)
+type StrictValue = Value Identity
+
+-- | Because the 'Value' type requires a context, we use the 'Identity'
+-- type as a "context-free context".
+type StrictValue' = Identity (Value Identity)
+
+-- Some type synonyms for readability. The 'S' is for strict.
+type SNative = Native Identity
+type SEnvironment = Environment Identity
+type SAttrSet = AttrSet Identity
+type SClosure = Closure Identity
 
 -- | Strict values can be converted into lazy values, since
 -- there is at that point no chance of failures.
 strictToLazy :: StrictValue -> LazyValue
-strictToLazy (StrictValue sval) = undefined
+strictToLazy sval = undefined
 
--- | 'Value's and 'LazyValue's can be converted into 'StrictValue's.
--- However, there is a chance that this conversion will fail, because
--- the input might produce an error upon evaluation. So returning a
--- 'Result' is best.
-valueToStrictValue :: Value -> Result StrictValue
-valueToStrictValue val = case unVal val of
-  VConstant c -> pure $ StrictValue $ VConstant c
-  VAttrSet attrs -> StrictValue . VAttrSet <$> lazyEnvToStrictEnv attrs
-  VList lvals -> StrictValue . VList <$> mapM lazyToStrict lvals
+-- | Lazy values can be converted into 'StrictValue's. However, there
+-- is a chance that this conversion will fail, because the input might
+-- produce an error upon evaluation. So we can only make things total
+-- by returning in the 'Eval' monad.
+valueToStrictValue :: WHNFValue -> Eval StrictValue
+valueToStrictValue val = case val of
+  VConstant c -> pure $ VConstant c
+  VAttrSet attrs -> VAttrSet <$> lazyEnvToStrictEnv attrs
+  VList lvals -> VList <$> do
+    strictVals <- mapM lazyToStrict lvals
+    return $ map return strictVals
   VFunction param (Closure env body) -> do
     sEnv <- lazyEnvToStrictEnv env
-    return $ StrictValue $ VFunction param (Closure sEnv body)
-  VNative native -> StrictValue . VNative <$> lazyNativeToStrict native
+    return $ VFunction param (Closure sEnv body)
+  VNative (NativeValue nval) -> valueToStrictValue =<< nval
+  VNative (NativeFunction _) -> do
+    throwError $ CustomError "Can't make a native function strict"
 
 -- | Convert a lazy Environment to one containing only strict values.
-lazyEnvToStrictEnv :: Environment -> Result (Environment' StrictValue)
+lazyEnvToStrictEnv :: LEnvironment -> Eval SEnvironment
 lazyEnvToStrictEnv env = foldM step emptyE (envToList env) where
   step res (name, lval) = do
     sval <- lazyToStrict lval
     return (insertEnv name sval res)
 
-lazyToStrict :: LazyValue -> Result StrictValue
+lazyToStrict :: LazyValue -> Eval StrictValue
 lazyToStrict lval = lval >>= valueToStrictValue
 
-lazyNativeToStrict :: Native -> Result (Native' StrictValue)
-lazyNativeToStrict (NativeValue lval) = NativeValue <$> lazyToStrict lval
-lazyNativeToStrict (NativeFunction _) = do
-  -- This might not be the correct approach, but it's ok for now.
-  error "Can't make strict native functions"
+-- lazyNativeToStrict :: LNative LazyValue -> Eval (SNative StrictValue')
+-- lazyNativeToStrict (NativeValue lval) = NativeValue <$> lazyToStrict lval
