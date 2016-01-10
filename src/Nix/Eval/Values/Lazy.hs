@@ -6,13 +6,16 @@ import Nix.Common
 import Nix.Eval.Expressions
 import Nix.Eval.Constants
 import Nix.Eval.Values.Generic
+import Control.Monad.Except
 import qualified Data.HashMap.Strict as H
 
--- | The result of evaluation: it might be an error. In Haskell, this
--- has the effect of creating lazy evaluation, as what is /inside/ the
--- result is not evaluated until inspected at some point.
-newtype Eval a = Eval (Either (EvalError Eval) a)
-  deriving (Functor, Applicative, Monad, Generic)
+-- | The result of evaluation: it might be an error.
+newtype Eval a = Eval (ExceptT (EvalError Eval) IO a)
+  deriving (Functor, Applicative, Monad)
+
+instance MonadError (EvalError Eval) Eval where
+  throwError = Eval . throwError
+  catchError (Eval e) handler = undefined
 
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally contains lazily evaluated values.
@@ -68,35 +71,6 @@ listV = VList . fromList . map validR
 -- | Create a function value.
 functionV :: Text -> LClosure -> WHNFValue
 functionV param closure = VFunction param closure
-
--- -- | Create a native value.
--- nativeV :: Natify n Eval => n -> WHNFValue
--- nativeV = WHNFValue . VNative . natify
-
--- -- | We can turn any lazy value into a native.
--- instance Natify LazyValue Eval where
---   natify = NativeValue
-
--- -- | This is where things get interesting: a 'Natify' instance for
--- -- functions on lazy values lets us embed any function on 'LazyValue's
--- -- as a 'Native' function. So for example, we can 'natify' a function
--- -- of type @'LazyValue' -> -- 'LazyValue'@, or @'LazyValue' ->
--- -- 'LazyValue' -> 'LazyValue'@, etc.
--- instance Natify t Eval => Natify (WHNFValue -> t) Eval where
---   natify function = NativeFunction $ _huh -- \lval -> do
---     -- let res :: t
---     --     res = function _lval
---     -- natify _what
-
--- -- | We can 'natify' an arbitrary function on values (provided its
--- -- return type implements 'Natify'). However, it has the effect of
--- -- forcing strict evaluation, as the only way to extract the inner
--- -- value is to evaluate the 'Result' wrapper to WHNF.
--- instance (Natify a m, Natify b m) => Natify (a -> b) m where
---   natify function = do
---     NativeFunction $ \x -> do
---       -- let y = natify (function x)
---       undefined
 
 -------------------------------------------------------------------------------
 --------------------------- Deep Evaluation -----------------------------------
