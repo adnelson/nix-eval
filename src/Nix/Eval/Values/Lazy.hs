@@ -8,55 +8,38 @@ import Nix.Eval.Constants
 import Nix.Eval.Values.Generic
 import qualified Data.HashMap.Strict as H
 
+-- | The result of evaluation: it might be an error. In Haskell, this
+-- has the effect of creating lazy evaluation, as what is /inside/ the
+-- result is not evaluated until inspected at some point.
+newtype Eval a = Eval (Either (EvalError Eval) a)
+  deriving (Functor, Applicative, Monad, Generic)
 
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally contains lazily evaluated values.
-newtype WHNFValue = WHNFValue {unVal :: Value LEval LazyValue}
-  deriving (Show, Eq)
+type WHNFValue = Value Eval
 
 -- | This is how we represent a lazily evaluated value: It's a
 -- 'Result', which means it might be an error; but if it's not an
 -- error it will be a value in WHNF.
-type LazyValue = LEval WHNFValue
+type LazyValue = Eval WHNFValue
 
 -- Some type synonyms for readability. The 'L' is for lazy.
--- | Our evaluation context; it might error or return a value in WHNF.
-type LEval = Eval WHNFValue
-type LNative = Native LEval WHNFValue
-type LEnvironment = Environment WHNFValue
-type LAttrSet = AttrSet WHNFValue
-type LClosure = Closure WHNFValue
-
-instance HasRTType WHNFValue LEval where
-  typeOf (WHNFValue v) = typeOf v
+type LNative = Native Eval
+type LEnvironment = Environment Eval
+type LAttrSet = AttrSet Eval
+type LClosure = Closure Eval
 
 -- | Wrap a value in a result.
 validR :: WHNFValue -> LazyValue
 validR = return
 
-validR' :: Value LEval LazyValue -> LazyValue
-validR' = validR . WHNFValue
-
 -- | Shorthand for creating an Environment from a list.
-mkEnv :: [(Text, WHNFValue)] -> Environment LazyValue
+mkEnv :: [(Text, WHNFValue)] -> LEnvironment
 mkEnv = Environment . H.fromList . map (map validR)
 
 -- | Shorthand to create a closure from a list and an expression.
 mkClosure :: [(Text, WHNFValue)] -> Expression -> LClosure
 mkClosure env expr = Closure (mkEnv env) expr
-
--- | Apply a native value as if it were a function, to zero or more arguments.
-applyNative :: LNative -> [LazyValue] -> LazyValue
-applyNative native [] = unwrapNative native
-applyNative native (rval:rvals) = case native of
-  NativeFunction func -> applyNative (func rval) rvals
-  NativeValue v -> expectedFunction v
-
--- | Turn an 'LNative' into an 'LazyValue'. This might rewrap it in a
--- 'VNative' constructor, if the object is not a 'NativeValue'.
-unwrapNative :: LNative -> LazyValue
-unwrapNative (NativeValue rv) = rv
-unwrapNative n = validR $ WHNFValue $ VNative n
 
 -- | Create a value from a string.
 strV :: Text -> WHNFValue
@@ -76,22 +59,22 @@ nullV = fromConstant Null
 
 -- | Create an attribute set value.
 attrsV :: [(Text, WHNFValue)] -> WHNFValue
-attrsV = WHNFValue . VAttrSet . mkEnv
+attrsV = VAttrSet . mkEnv
 
 -- | Create a list value.
 listV :: [WHNFValue] -> WHNFValue
-listV = WHNFValue . VList . fromList . map validR
+listV = VList . fromList . map validR
 
 -- | Create a function value.
 functionV :: Text -> LClosure -> WHNFValue
-functionV param closure = WHNFValue $ VFunction param closure
+functionV param closure = VFunction param closure
 
 -- -- | Create a native value.
--- nativeV :: Natify n LEval => n -> WHNFValue
+-- nativeV :: Natify n Eval => n -> WHNFValue
 -- nativeV = WHNFValue . VNative . natify
 
 -- -- | We can turn any lazy value into a native.
--- instance Natify LazyValue LEval where
+-- instance Natify LazyValue Eval where
 --   natify = NativeValue
 
 -- -- | This is where things get interesting: a 'Natify' instance for
@@ -99,7 +82,7 @@ functionV param closure = WHNFValue $ VFunction param closure
 -- -- as a 'Native' function. So for example, we can 'natify' a function
 -- -- of type @'LazyValue' -> -- 'LazyValue'@, or @'LazyValue' ->
 -- -- 'LazyValue' -> 'LazyValue'@, etc.
--- instance Natify t LEval => Natify (WHNFValue -> t) LEval where
+-- instance Natify t Eval => Natify (WHNFValue -> t) Eval where
 --   natify function = NativeFunction $ _huh -- \lval -> do
 --     -- let res :: t
 --     --     res = function _lval
@@ -122,38 +105,23 @@ functionV param closure = WHNFValue $ VFunction param closure
 -- | Most of the time we evaluate things lazily, but sometimes we want
 -- to be able to evaluate strictly (esp. in the `deepSeq` function).
 deeplyEval :: WHNFValue -> LazyValue
-deeplyEval v@(WHNFValue val) = case val of
-  VNative (NativeValue val') -> deeplyEvalLazy val'
-  VList lvals -> WHNFValue . VList <$> foldM step mempty lvals where
-    step = undefined
-    -- -- Recur on items of the list, and check if any are errors.
-    -- let (_, errs) = break (isError . deeplyEvalLazy) lvals
-    -- case toList errs of
-    --   [] -> return v -- no errors, can just return the thing
-    --   (err:_) -> errorR err -- return the first error found
-  VAttrSet attrs -> WHNFValue . VAttrSet <$> foldM step emptyE (envToList attrs) where
-    step = undefined
-    -- let (_, errs) = break (isError . deeplyEvalLazy) $ H.elems lvals
-    -- case errs of
-    --   [] -> return v -- no errors, can just return the thing
-    --   (err:_) -> _errorR err -- return the first error found
+deeplyEval val = case val of
+  VNative (NativeValue nval) -> join $ deeplyEvalLazy nval
+  VList lvals -> map VList $ mapM deeplyEvalLazy lvals
+  VAttrSet (Environment attrs) -> do
+    VAttrSet . Environment <$> mapM deeplyEvalLazy attrs
   -- Note that we don't recur into functions (or NativeFunctions), and
   -- since constants can't fail there's no need to handle them either.
-  _ -> return v
+  _ -> return val
 
 -- | Deeply evaluate a lazy value, while keeping it appearing as lazy.
-deeplyEvalLazy :: LazyValue -> LazyValue
-deeplyEvalLazy lval = lval >>= deeplyEval
+deeplyEvalLazy :: LazyValue -> Eval LazyValue
+deeplyEvalLazy lval = lval >>= deeplyEval >> return lval
 
-instance FromConstant LazyValue where
-  fromConstant = validR . fromConstant
-  fromConstants = validR . fromConstants
-  fromConstantSet = validR . fromConstantSet
-
-instance FromConstant WHNFValue where
-  fromConstant = WHNFValue . fromConstant
-  fromConstants = WHNFValue . fromConstants
-  fromConstantSet = WHNFValue . fromConstantSet
+-- instance FromConstant LazyValue where
+--   fromConstant = validR . fromConstant
+--   fromConstants = validR . fromConstants
+--   fromConstantSet = validR . fromConstantSet
 
 -- | Synonym for monadic bind, applying a function inside of a
 -- 'Result', provided the 'Result' contains a 'WHNFValue'.

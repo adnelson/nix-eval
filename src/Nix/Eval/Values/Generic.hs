@@ -24,12 +24,15 @@ data Value m
   -- ^ Constant values (isomorphic to constant expressions).
   | VAttrSet (AttrSet m)
   -- ^ Attribute set values.
-  | VList (Seq (m (Value m)))
+  | VList (Seq (MValue m))
   -- ^ List values.
   | VFunction Text (Closure m)
   -- ^ Functions, with a parameter and a closure.
-  | VNative (forall v. Native m v)
+  | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
+
+-- | A 'Value' wrapped in its monadic context.
+type MValue m = m (Value m)
 
 instance Extract m => Show (Value m) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
@@ -37,7 +40,7 @@ instance Extract m => Show (Value m) where
   show (VList vs) = show $ map extract vs
   show (VFunction param closure) = concat [ unpack param, " => ("
                                           , show closure, ")"]
-  show (VNative (NativeValue v)) = show v
+  show (VNative (NativeValue v)) = show $ extract v
   show (VNative _) = "(native function)"
 
 instance Extract m => Eq (Value m) where
@@ -45,7 +48,8 @@ instance Extract m => Eq (Value m) where
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = map extract vs == map extract vs'
   VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
-  VNative (NativeValue v) == VNative (NativeValue v') = v == v'
+  VNative (NativeValue v) == VNative (NativeValue v') =
+    extract v == extract v'
   _ == _ = False
 
 instance IsString (Value m) where
@@ -57,19 +61,13 @@ instance Monad m => FromConstant (Value m) where
   fromConstantSet set = VAttrSet $ Environment $
     map (return . fromConstant) set
 
--- | The result of evaluation: it might be an error. In Haskell, this
--- has the effect of creating lazy evaluation, as what is /inside/ the
--- result is not evaluated until inspected at some point.
-newtype Eval a = Eval (Either (EvalError Eval) a)
-  deriving (Functor, Applicative, Monad, Generic)
-
 -------------------------------------------------------------------------------
 -- Environments and Attribute Sets --------------------------------------------
 -------------------------------------------------------------------------------
 
 -- | An environment is conceptually just a name -> value mapping, but the
 -- element type is parametric to allow usage of different kinds of values.
-newtype Environment m = Environment {eEnv :: HashMap Text (m (Value m))}
+newtype Environment m = Environment {eEnv :: HashMap Text (MValue m)}
 
 instance Extract m => Eq (Environment m) where
   Environment e1 == Environment e2 = map extract e1 == map extract e2
@@ -97,7 +95,7 @@ unionEnv :: Environment m -> Environment m -> Environment m
 unionEnv (Environment e1) (Environment e2) = Environment (e1 `union` e2)
 
 -- | Look up a name in an environment.
-lookupEnv :: Text -> Environment m -> Maybe (m (Value m))
+lookupEnv :: Text -> Environment m -> Maybe (MValue m)
 lookupEnv name (Environment env) = H.lookup name env
 
 -- | Insert a name/value into an environment.
@@ -106,7 +104,7 @@ insertEnv name v (Environment env) = Environment $
   H.insert name (return v) env
 
 -- | Convert an environment to a list of (name, v).
-envToList :: Environment m -> [(Text, m (Value m))]
+envToList :: Environment m -> [(Text, MValue m)]
 envToList (Environment env) = H.toList env
 
 -- | An empty environment.
@@ -124,12 +122,20 @@ emptyC = Closure emptyE
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
 data Native (m :: (* -> *)) :: * -> * where
-  NativeValue :: Value m -> Native m (Value m)
-  -- ^ We can A terminal value
+  NativeValue :: MValue m -> Native m (MValue m)
+  -- ^ A terminal value (which has not necessarily been evaluated).
   NativeFunction :: (m v1 -> m (Native m v2)) -> Native m (v1 -> v2)
   -- ^ A function which lets us take the "next step" given a value.
   -- Either the argument or the result of this function might be
   -- failure, so we express that by having them be a monadic values.
+
+-- | Apply a native value as if it were a function.
+applyNative :: Native m (a -> b) -> m a -> m (Native m b)
+applyNative (NativeFunction func) arg = func arg
+
+unwrapNative :: Monad m => Native m v -> MValue m
+unwrapNative (NativeValue v) = v
+unwrapNative n = return $ VNative n
 
 -- -- | The relation @Natify t m@ states that given a value of type @t@,
 -- -- I can produce a value of type @Native v@ in the context @m@, where
