@@ -8,6 +8,7 @@ module Nix.Common (
   module Data.Sequence,
   module GHC.Generics,
   module Control.DeepSeq,
+  Extract(..),
   pathToText
   ) where
 
@@ -35,3 +36,8 @@ pathToText pth = case toText pth of
 
 (.>) :: (a -> b) -> (b -> c) -> (a -> c)
 (.>) = flip (.)
+
+-- | The opposite of 'pure'; classes whose internal values can be
+-- extracted purely.
+class Extract m where
+  extract :: m a -> a
