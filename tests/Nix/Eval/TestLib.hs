@@ -13,7 +13,7 @@ import Nix.Eval.Expressions
 import Nix.Eval.Evaluator
 import Nix.Eval.Constants
 import Nix.Eval.Values
-import Nix.Eval.Builtins
+import Nix.Eval.Values.Builtins
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 
@@ -47,30 +47,22 @@ instance Arbitrary Expression where
     [ EConstant <$> arbitrary
     , EList <$> arbitrary ]
 
-instance Arbitrary a => Arbitrary (Value' a) where
+instance Monad m => Arbitrary (Value m) where
   arbitrary = oneof
     [ VConstant <$> arbitrary
     , VAttrSet <$> arbitrary
-    , VList <$> arbitrary
+    , VList <$> map (map return) arbitrary
     , VFunction <$> arbitrary <*> arbitrary
-    , VNative <$> arbitrary ]
+    , VNative . NativeValue . return <$> arbitrary ]
 
-instance Arbitrary Value where
-  arbitrary = Value <$> arbitrary
+instance Monad m => Arbitrary (Environment m) where
+  arbitrary = Environment <$> map (map return) arbitrary
 
-instance Arbitrary a => Arbitrary (Environment' a) where
-  arbitrary = Environment <$> arbitrary
-
-instance Arbitrary a => Arbitrary (Closure' a) where
+instance Monad m => Arbitrary (Closure m) where
   arbitrary = Closure <$> arbitrary <*> arbitrary
 
-instance Arbitrary a => Arbitrary (Result a) where
-  arbitrary = frequency
-    [ (10, Result . Right <$> arbitrary)
-    , (1, Result . Left <$> arbitrary) ]
-
-instance Arbitrary a => Arbitrary (Native' a) where
-  arbitrary = NativeValue <$> arbitrary
+instance Monad m => Arbitrary (Native m (Value m)) where
+  arbitrary = NativeValue <$> map return arbitrary
 
 instance Arbitrary EvalError where
   arbitrary = oneof
@@ -86,6 +78,7 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ map pure $ enumFrom RT_Null
 
+{-
 shouldEval :: Expression -> Expectation
 shouldEval expr = shouldBeValid $ runEval expr
 
@@ -143,3 +136,4 @@ failingExpression = "throw" @@ strE "failed on purpose"
 -- | An expression that will always succeed evaluation.
 succeedingExpression :: Expression
 succeedingExpression = strE "success"
+-}

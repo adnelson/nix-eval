@@ -1,34 +1,13 @@
 # stylish-haskell configuration file
-# ==================================
-
-# The stylish-haskell tool is mainly configured by specifying steps. These
-# steps are a list, so they have an order, and one specific step may appear
-# more than once (if needed). Each file is processed by these steps in the
-# given order.
+# See: https://github.com/jaspervdj/stylish-haskell/blob/master/data/stylish-haskell.yaml
 steps:
-  # Import cleanup
   - imports:
       align: group
-
-  # Language pragmas
   - language_pragmas:
       style: vertical
       remove_redundant: true
-
-  # Align the types in record declarations
   - records: {}
-
-  # Remove trailing whitespace
   - trailing_whitespace: {}
-
-# A common setting is the number of columns (parts of) code will be wrapped
-# to.
 columns: 79
-
-# Sometimes, language extensions are specified in a cabal file or from the
-# command line instead of using language pragmas in the file. stylish-haskell
-# needs to be aware of these, so it can parse the file correctly.
-#
-# No language extensions are enabled by default.
 language_extensions:
   - LambdaCase
