@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 module Nix.Eval.Values.Lazy where
 
 import Nix.Common
@@ -13,12 +10,14 @@ import qualified Data.HashMap.Strict as H
 newtype Eval a = Eval {runEval :: ExceptT EvalError IO a}
   deriving (Functor, Applicative, Monad)
 
+-- | Run an evaluator action, and return either an error or a result.
 run :: Eval a -> IO (Either EvalError a)
-run (Eval r) = runExceptT r
+run = runExceptT . runEval
 
 instance MonadError EvalError Eval where
   throwError = Eval . throwError
-  catchError (Eval e) handler = undefined
+  catchError action handler = Eval $ do
+    runEval action `catchError` \err -> runEval $ handler err
 
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally contains lazily evaluated values.

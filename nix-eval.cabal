@@ -40,7 +40,9 @@ library
                      , DeriveGeneric
                      , ScopedTypeVariables
                      , MultiParamTypeClasses
-  other-extensions:    FlexibleInstances, TypeSynonymInstances
+                     , FlexibleContexts
+                     , FlexibleInstances
+                     , TypeSynonymInstances
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports
 
 Test-Suite spec
@@ -69,7 +71,10 @@ Test-Suite spec
                      , GADTs
                      , DeriveGeneric
                      , ScopedTypeVariables
-  other-extensions:    FlexibleInstances, TypeSynonymInstances
+                     , MultiParamTypeClasses
+                     , FlexibleContexts
+                     , FlexibleInstances
+                     , TypeSynonymInstances
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports -fno-warn-type-defaults
 
 Source-Repository head
