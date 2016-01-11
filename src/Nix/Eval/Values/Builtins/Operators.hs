@@ -89,7 +89,6 @@ binop_neq v1 v2 = undefined -- fromBool (v1 /= v2)
 
 -- | Translate a binary operator into a native (binary) function.
 interpretBinop :: NBinaryOp -> LNative (WHNFValue -> WHNFValue -> WHNFValue)
-interpretBinop = undefined
 -- interpretBinop NEq = natify binop_eq
 -- interpretBinop NNEq = natify binop_neq
 -- interpretBinop NLt = natify $ mkBinopNum (<)
@@ -99,12 +98,13 @@ interpretBinop = undefined
 -- interpretBinop NAnd = natify binop_and
 -- interpretBinop NOr = natify binop_or
 -- interpretBinop NImpl = natify binop_impl
--- interpretBinop NUpdate = natify binop_update
+interpretBinop NUpdate = toNative2L binop_update
 -- interpretBinop NPlus = natify binop_plus
 -- interpretBinop NMinus = natify $ mkBinopNum (-)
 -- interpretBinop NMult = natify $ mkBinopNum (*)
 -- interpretBinop NDiv = natify binop_div
 -- interpretBinop NConcat = natify binop_concat
+interpretBinop _ = undefined
 
 unop_not :: WHNFValue -> LazyValue
 unop_not val = case val of
