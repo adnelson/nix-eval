@@ -107,9 +107,17 @@ insertEnv :: Monad m => Text -> Value m -> Environment m -> Environment m
 insertEnv name v (Environment env) = Environment $
   H.insert name (return v) env
 
+-- | Insert a name/value into an environment, where the value is lazy.
+insertEnvLazy :: Text -> m (Value m) -> Environment m -> Environment m
+insertEnvLazy name v (Environment env) = Environment $ H.insert name v env
+
 -- | Convert an environment to a list of (name, v).
 envToList :: Environment m -> [(Text, m (Value m))]
 envToList (Environment env) = H.toList env
+
+-- | Get the set of keys in the environment.
+envKeySet ::Environment m -> Set Text
+envKeySet (Environment env) = S.fromList $ H.keys env
 
 -- | An empty environment.
 emptyE :: Environment m
@@ -128,15 +136,16 @@ emptyC = Closure emptyE
 data Native (m :: (* -> *)) :: * -> * where
   NativeValue :: m (Value m) -> Native m (Value m)
   -- ^ A terminal value (which has not necessarily been evaluated).
-  NativeFunction :: (m v1 -> m (Native m v2)) -> Native m (v1 -> v2)
+  NativeFunction :: (m (Value m) -> m (Native m v)) -> Native m (Value m -> v)
   -- ^ A function which lets us take the "next step" given a value.
   -- Either the argument or the result of this function might be
   -- failure, so we express that by having them be a monadic values.
 
 -- | Apply a native value as if it were a function.
-applyNative :: Native m (a -> b) -> m a -> m (Native m b)
+applyNative :: Native m (Value m -> t) -> m (Value m) -> m (Native m t)
 applyNative (NativeFunction func) arg = func arg
 
+-- | Turn a 'Native' into a monadic 'Value'.
 unwrapNative :: Monad m => Native m v -> m (Value m)
 unwrapNative (NativeValue v) = v
 unwrapNative n = return $ VNative n

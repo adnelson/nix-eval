@@ -5,6 +5,7 @@ import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Constants
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+import Nix.Eval.Values.NativeConversion
 
 import qualified Data.Set as S
 import qualified Data.HashMap.Strict as H
@@ -102,46 +103,11 @@ builtin_deepSeq val x = deeplyEval val >> x
 n_head :: LNative (WHNFValue -> WHNFValue)
 n_head = toNative1 builtin_head
 
--- | Takes a function which takes a strictly-evaluated value and turns
--- it into a 'Native' value. Note that we need to inspect the inner
--- value (hence the 'map') before the function can be applied, so this
--- has the effect of forcing WHNF evaluation.
-toNative1 :: (WHNFValue -> LazyValue) -> LNative (WHNFValue -> WHNFValue)
-toNative1 f = NativeFunction $ map (NativeValue . f)
-
--- | Similar to 'toNative1', except that it does not need to unpack
--- the first argument value (and hence potentially fail), so the
--- initial value stays lazy.
-toNative1L :: (LazyValue -> LazyValue) -> LNative (WHNFValue -> WHNFValue)
-toNative1L f = NativeFunction $ return . NativeValue . f
-
--- | For arity-2 functions on WHNF values.
-toNative2 :: (WHNFValue -> WHNFValue -> LazyValue)
-          -> LNative (WHNFValue -> WHNFValue -> WHNFValue)
-toNative2 f = NativeFunction $ \lazyVal -> do
-  val <- lazyVal
-  return $ toNative1 $ f val
-
--- | For arity-2 functions whose second argument can be lazily evaluated.
-toNative2L :: (WHNFValue -> LazyValue -> LazyValue)
-          -> LNative (WHNFValue -> WHNFValue -> WHNFValue)
-toNative2L f = NativeFunction $ \lazyVal -> do
-  val <- lazyVal
-  return $ toNative1L $ f val
-
--- lvalToNative :: (WHNFValue -> t) -> LNative (WHNFValue -> t)
--- lvalToNative func = NativeFunction $ \lval -> do
---   -- Pull a value out of the lazy value
---   val <- lval
---   -- Apply the function to the value
---   let res = func val
---   _what
-
-{-
 -- | The set of built-in functions to add to the environment before
 -- evaluation.
-builtins :: AttrSet
-builtins = mkEnv [ ("throw", nativeV builtin_throw)
+builtins :: LAttrSet
+builtins = mkEnv [] {-
+                   ("throw", nativeV builtin_throw)
                  , ("seq", nativeV builtin_seq)
                  , ("length", nativeV builtin_length)
                  , ("isAttrs", nativeV builtin_length)
@@ -150,6 +116,4 @@ builtins = mkEnv [ ("throw", nativeV builtin_throw)
                  , ("isBool", nativeV builtin_length)
                  , ("length", nativeV builtin_length)
                  ]
-
-
 -}

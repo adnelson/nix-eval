@@ -5,7 +5,7 @@ import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Constants
 import Nix.Eval.Expressions
 import Nix.Eval.Values
-import Nix.Eval.Values.Builtins.NativeFunctions
+import Nix.Eval.Values.NativeConversion
 
 -- | Concatenation of lists.
 binop_concat :: WHNFValue -> WHNFValue -> LazyValue
@@ -95,7 +95,7 @@ interpretBinop :: NBinaryOp -> LNative (WHNFValue -> WHNFValue -> WHNFValue)
 -- interpretBinop NLte = natify $ mkBinopNum (<=)
 -- interpretBinop NGt = natify $ mkBinopNum (>)
 -- interpretBinop NGte = natify $ mkBinopNum (>=)
--- interpretBinop NAnd = natify binop_and
+interpretBinop NAnd = toNative2L binop_and
 -- interpretBinop NOr = natify binop_or
 -- interpretBinop NImpl = natify binop_impl
 interpretBinop NUpdate = toNative2L binop_update

@@ -5,69 +5,71 @@ import Nix.Eval.Constants
 import Nix.Eval.Values.Builtins (builtins, interpretBinop, interpretUnop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+import Nix.Eval.Values.NativeConversion
 
 -- | Maps a function over a list. Needs to be defined in this module
 -- since it uses `evaluate` under the hood. This might not be necessary...
-builtin_map :: Native
-builtin_map = natify $ \func vlist -> case unVal vlist of
-  VList list -> validR' $ VList $ map (evalApply func) list
-  _ -> expectedList vlist
+builtin_map :: LNative WHNFFunc2
+builtin_map = toNative2L' $ \func -> \case
+  VList list -> pure $ VList $ map (evalApply func) list
+  val -> expectedList val
 
 evalApply :: LazyValue -> LazyValue -> LazyValue
-evalApply func arg = func >>= \v -> case unVal v of
-  VNative n -> applyNative n [arg]
+evalApply func arg = func >>= \case
+  VNative (NativeFunction f) -> VNative <$> f arg
   VFunction param (Closure cEnv body) -> do
-    let env' = insertEnv param arg cEnv
+    let env' = insertEnvLazy param arg cEnv
     evaluate env' body
-  _ -> expectedFunction v
+  v -> expectedFunction v
 
-allBuiltins :: Environment
-allBuiltins = insertEnv "map" (validR' $ VNative builtin_map) builtins
+allBuiltins :: LEnvironment
+allBuiltins = insertEnv "map" (VNative builtin_map) builtins
 
 -- | Evaluate an expression within an environment.
-evaluate :: Environment -- ^ Enclosing environment.
+evaluate :: LEnvironment -- ^ Enclosing environment.
          -> Expression  -- ^ Expression to evaluate.
          -> LazyValue   -- ^ Result of evaluation.
 evaluate env expr = case expr of
   EConstant constant -> return $ fromConstant constant
   EVar name -> case lookupEnv name env of
-    Nothing -> errorR $ NameError name env
+    Nothing -> throwError $ NameError name (envKeySet env)
     Just val -> val
-  ELambda param body -> validR' $ VFunction param $ Closure env body
-  EBinaryOp left op right -> do
+  ELambda param body -> pure $ VFunction param $ Closure env body
+  EBinaryOp left op right -> VNative <$> do
+    -- Turn the operator into a binary native function.
     let func = interpretBinop op
-        leftVal = evaluate env left
-        rightVal = evaluate env right
-    applyNative func [leftVal, rightVal]
-  EUnaryOp op expr' -> do
+    -- Apply the first argument, and get a new function.
+    partiallyApplied <- applyNative func $ evaluate env left
+    -- Apply this to the second argument.
+    applyNative partiallyApplied $ evaluate env right
+  EUnaryOp op innerExpr -> VNative <$> do
+    -- Translate the operator into a native function.
     let func = interpretUnop op
-    applyNative func [evaluate env expr']
+    -- Apply the function to the inner expression.
+    applyNative func $ evaluate env innerExpr
   EApply func arg -> evaluate env func `evalApply` evaluate env arg
-  EList exprs -> validR' $ VList $ map (evaluate env) exprs
+  EList exprs -> pure $ VList $ map (evaluate env) exprs
   ENonRecursiveAttrs attrs -> do
-    validR' $ VAttrSet $ Environment $ map (evaluate env) attrs
-  ERecursiveAttrs attrs -> validR $ Value $ VAttrSet newEnv where
+    pure $ VAttrSet $ Environment $ map (evaluate env) attrs
+  ERecursiveAttrs attrs -> pure $ VAttrSet newEnv where
     -- Create a new environment by evaluating the values of the set.
     -- Each should be evaluated in an environment which includes the
     -- variables being evaluated; thus it is a self-referential
     -- definition. Unfortunately this means that (as currently
     -- formulated) we cannot detect infinite recursion.
     newEnv = Environment $ map (evaluate (newEnv `unionEnv` env)) attrs
-  EAttrReference attrs key -> do
-    val <- evaluate env attrs
-    case unVal val of
-      VAttrSet set -> case lookupEnv key set of
-        Nothing -> errorR $ KeyError key set
-        Just res -> res
-      _ -> expectedAttrs val
+  EAttrReference attrs key -> evaluate env attrs >>= \case
+    VAttrSet set -> case lookupEnv key set of
+      Nothing -> throwError $ KeyError key (envKeySet set)
+      Just res -> res
+    val -> expectedAttrs val
   EWith attrs expr -> do
     -- Evaluate the attribute expression. It must be an attribute set.
-    val <- evaluate env attrs
-    case unVal val of
+    evaluate env attrs >>= \case
       -- Bring all of those attributes into scope.
       VAttrSet set -> evaluate (set `unionEnv` env) expr
-      _ -> expectedAttrs val
+      val -> expectedAttrs val
 
 -- | Evaluate an expression with the builtins in scope.
-runEval :: Expression -> LazyValue
-runEval e = evaluate allBuiltins e
+performEval :: Expression -> LazyValue
+performEval e = evaluate allBuiltins e
