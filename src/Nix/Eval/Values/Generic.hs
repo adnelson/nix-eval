@@ -71,24 +71,24 @@ newtype Environment m = Environment {eEnv :: HashMap Text (m (Value m))}
 instance Extract m => Eq (Environment m) where
   Environment e1 == Environment e2 = map extract e1 == map extract e2
 
-instance MonadIO io => ShowIO (Value io) io where
-  showIO (VConstant c) = return $ "VConstant (" <> tshow c <> ")"
-  showIO (VAttrSet set) = showIO set
-  showIO (VList vs) = showIO vs
-  showIO (VFunction param closure) = do
-    closureRep <- showIO closure
-    return $ concat [ param, " => (", closureRep, ")"]
-  showIO (VNative (NativeValue v)) = showIO v
-  showIO (VNative _) = return "(native function)"
+-- instance MonadIO io => ShowIO (Value io) io where
+--   showIO (VConstant c) = return $ "VConstant (" <> tshow c <> ")"
+--   showIO (VAttrSet set) = showIO set
+--   showIO (VList vs) = showIO vs
+--   showIO (VFunction param closure) = do
+--     closureRep <- showIO closure
+--     return $ concat [ param, " => (", closureRep, ")"]
+--   showIO (VNative (NativeValue v)) = showIO v
+--   showIO (VNative _) = return "(native function)"
 
--- | We use a nix-esque syntax for showing an environment.
-instance MonadIO io => ShowIO (Environment io) io where
-  showIO (Environment env) = do
-    items <- showItems
-    return ("{" <> items <> "}")
-    where
-      showPair (n, v) = showIO v >>= \v' -> return (n <> " = " <> v')
-      showItems = intercalate "; " <$> mapM showPair (H.toList env)
+-- -- | We use a nix-esque syntax for showing an environment.
+-- instance MonadIO io => ShowIO (Environment io) io where
+--   showIO (Environment env) = do
+--     items <- showItems
+--     return ("{" <> items <> "}")
+--     where
+--       showPair (n, v) = showIO v >>= \v' -> return (n <> " = " <> v')
+--       showItems = intercalate "; " <$> mapM showPair (H.toList env)
 
 -- | We also use environments to represent attribute sets, since they
 -- have the same behavior (in fact the `with` construct makes this
@@ -105,10 +105,10 @@ instance (Extract ctx) => Show (Environment ctx) where
 data Closure m = Closure (Environment m) Expression
   deriving (Eq, Generic)
 
-instance MonadIO io => ShowIO (Closure io) io where
-  showIO (Closure env body) = do
-    envRep <- showIO env
-    return $ "with " <> envRep <> "; " <> tshow body
+-- instance MonadIO io => ShowIO (Closure io) io where
+--   showIO (Closure env body) = do
+--     envRep <- showIO env
+--     return $ "with " <> envRep <> "; " <> tshow body
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
@@ -178,33 +178,28 @@ data RuntimeType
 
 instance NFData RuntimeType
 
-class (MonadError (EvalError m) m) => Context m where
-  errorR :: EvalError m -> m a
-  errorR = throwError
-
 -- | Things that have runtime types. Those types are discovered
 -- through some computation context @m@ (which must be a monad, since
 -- the computation could fail).
-class Context m => HasRTType t m where
+class MonadError EvalError m => HasRTType t m where
   typeOf :: t -> m RuntimeType
 
--- | Constants have a runtime type and will never fail; they can be used with
--- any context.
-instance Context m => HasRTType Constant m where
-  typeOf (String _) = pure RT_String
-  typeOf (Path _) = pure RT_Path
-  typeOf (Int _) = pure RT_Int
-  typeOf (Bool _) = pure RT_Bool
-  typeOf Null = pure RT_Null
+-- | Constants have a runtime type which can be determined in O(1).
+typeOfConstant :: Constant -> RuntimeType
+typeOfConstant (String _) = RT_String
+typeOfConstant (Path _) = RT_Path
+typeOfConstant (Int _) = RT_Int
+typeOfConstant (Bool _) = RT_Bool
+typeOfConstant Null = RT_Null
 
 -- | If some type @t@ has a runtime type but might fail with @EvalError v@,
 -- then a 'Eval' returning @t@ also a runtime type. If the result fails to
 -- evaluate then we throw an @EvalError v@; otherwise we return t's type.
-instance (Context m, HasRTType t m) => HasRTType (m t) m where
+instance (MonadError EvalError m, HasRTType t m) => HasRTType (m t) m where
   typeOf res = res >>= typeOf
 
-instance (Context m) => HasRTType (Value m) m where
-  typeOf (VConstant constant) = typeOf constant
+instance (MonadError EvalError m) => HasRTType (Value m) m where
+  typeOf (VConstant constant) = pure $ typeOfConstant constant
   typeOf (VAttrSet _) = pure RT_AttrSet
   typeOf (VList _) = pure RT_List
   typeOf (VFunction _ _) = pure RT_Function
@@ -221,10 +216,10 @@ hasType expectedType obj = do
 -------------------------------------------------------------------------------
 
 -- | The type of errors which can occur during evaluation.
-data EvalError m
-  = NameError Text (Environment m)
+data EvalError
+  = NameError Text (Set Text)
   -- ^ If we attempt to evaluate an undefined variable.
-  | KeyError Text (AttrSet m)
+  | KeyError Text (Set Text)
   -- ^ If we attempt to grab a key which doesn't exist in a set.
   | IndexError Integer Int
   -- ^ If we try to index into a list which is too short.
@@ -241,14 +236,14 @@ data EvalError m
   deriving (Show, Eq, Typeable, Generic)
 
 -- | When expecting a single type.
-expectedTheType :: RuntimeType -> RuntimeType -> EvalError m
+expectedTheType :: RuntimeType -> RuntimeType -> EvalError
 expectedTheType t butGot = TypeError (S.singleton t) butGot
 
 -- | Throw a type error when expecting a single type.
 throwExpectedType :: HasRTType t m => RuntimeType -> t -> m a
 throwExpectedType expected val = do
   actual <- typeOf val
-  errorR $ expectedTheType expected actual
+  throwError $ expectedTheType expected actual
 
 -- | When expecting a function.
 expectedFunction :: HasRTType t m => t -> m a
@@ -278,4 +273,4 @@ expectedBool = throwExpectedType RT_Bool
 expectedOneOf :: HasRTType t m => [RuntimeType] -> t -> m a
 expectedOneOf types val = do
   actualType <- typeOf val
-  errorR $ TypeError (S.fromList types) actualType
+  throwError $ TypeError (S.fromList types) actualType

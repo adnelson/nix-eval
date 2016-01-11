@@ -41,14 +41,14 @@ builtin_seq = seq
 -- | The throw function forces an error to occur.
 builtin_throw :: WHNFValue -> LazyValue
 builtin_throw val = case val of
-  VConstant (String msg) -> errorR $ CustomError msg
+  VConstant (String msg) -> throwError $ CustomError msg
   _ -> expectedString val
 
 -- | Asserts its first argument is true, and then returns its second.
 builtin_assert :: WHNFValue -> LazyValue -> LazyValue
 builtin_assert val res = case val of
   VConstant (Bool True) -> res
-  VConstant (Bool False) -> errorR AssertionError
+  VConstant (Bool False) -> throwError AssertionError
   _ -> expectedBool val
 
 -- | Get the length of a list.
@@ -67,9 +67,9 @@ builtin_cons val v = case v of
 builtin_elemAt :: WHNFValue -> WHNFValue -> LazyValue
 builtin_elemAt val1 val2 = case val1 of
   VList list -> case val2 of
-    VConstant (Int i) | i < 0 -> errorR $ IndexError i (length list)
+    VConstant (Int i) | i < 0 -> throwError $ IndexError i (length list)
     VConstant (Int i) -> case list `index` fromIntegral i of
-      Nothing -> errorR $ IndexError i (length list)
+      Nothing -> throwError $ IndexError i (length list)
       Just val -> val
     _ -> expectedInt val2
   _ -> expectedList val1

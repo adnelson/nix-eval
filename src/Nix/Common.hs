@@ -54,14 +54,21 @@ instance Extract Identity where
 
 -- | For things whose string representation needs to be computed with
 -- potential side-effects.
-class MonadIO io => ShowIO t io where
-  showIO :: t -> io Text
+class ShowIO t where
+  showIO :: t -> IO Text
 
-instance ShowIO t io => ShowIO (io t) io where
+instance ShowIO t => ShowIO (IO t) where
   showIO action = action >>= showIO
 
-instance (ShowIO a io, Traversable t, Show (t Text))
-         => ShowIO (t (io a)) io where
+instance (ShowIO a, Traversable t, Show (t Text))
+         => ShowIO (t (IO a)) where
   showIO vals = do
     innerReps <- mapM showIO vals
     return $ tshow innerReps
+
+instance (Show a, ShowIO b) => ShowIO (Either a b) where
+  showIO (Left a) = return $ tshow a
+  showIO (Right b) = showIO b
+
+instance (Show a, ShowIO b) => ShowIO (ExceptT a IO b) where
+  showIO action = showIO =<< runExceptT action
