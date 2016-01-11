@@ -100,8 +100,10 @@ builtin_deepSeq :: WHNFValue -> LazyValue -> LazyValue
 builtin_deepSeq val x = deeplyEval val >> x
 
 n_head :: LNative (WHNFValue -> WHNFValue)
-n_head = NativeFunction $ map (NativeValue . builtin_head)
+n_head = toNative1 builtin_head
 
+toNative1 :: (WHNFValue -> LazyValue) -> LNative (WHNFValue -> WHNFValue)
+toNative1 f = NativeFunction $ map (NativeValue . f)
 
 -- lvalToNative :: (WHNFValue -> t) -> LNative (WHNFValue -> t)
 -- lvalToNative func = NativeFunction $ \lval -> do

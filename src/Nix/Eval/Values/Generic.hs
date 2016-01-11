@@ -60,6 +60,11 @@ instance Monad m => FromConstant (Value m) where
   fromConstantSet set = VAttrSet $ Environment $
     map (return . fromConstant) set
 
+instance Monad m => FromConstant (m (Value m)) where
+  fromConstant = return . fromConstant
+  fromConstants = return . fromConstants
+  fromConstantSet = return . fromConstantSet
+
 -------------------------------------------------------------------------------
 -- Environments and Attribute Sets --------------------------------------------
 -------------------------------------------------------------------------------
@@ -70,25 +75,6 @@ newtype Environment m = Environment {eEnv :: HashMap Text (m (Value m))}
 
 instance Extract m => Eq (Environment m) where
   Environment e1 == Environment e2 = map extract e1 == map extract e2
-
--- instance MonadIO io => ShowIO (Value io) io where
---   showIO (VConstant c) = return $ "VConstant (" <> tshow c <> ")"
---   showIO (VAttrSet set) = showIO set
---   showIO (VList vs) = showIO vs
---   showIO (VFunction param closure) = do
---     closureRep <- showIO closure
---     return $ concat [ param, " => (", closureRep, ")"]
---   showIO (VNative (NativeValue v)) = showIO v
---   showIO (VNative _) = return "(native function)"
-
--- -- | We use a nix-esque syntax for showing an environment.
--- instance MonadIO io => ShowIO (Environment io) io where
---   showIO (Environment env) = do
---     items <- showItems
---     return ("{" <> items <> "}")
---     where
---       showPair (n, v) = showIO v >>= \v' -> return (n <> " = " <> v')
---       showItems = intercalate "; " <$> mapM showPair (H.toList env)
 
 -- | We also use environments to represent attribute sets, since they
 -- have the same behavior (in fact the `with` construct makes this
@@ -104,11 +90,6 @@ instance (Extract ctx) => Show (Environment ctx) where
 -- | A closure is an unevaluated expression, with just an environment.
 data Closure m = Closure (Environment m) Expression
   deriving (Eq, Generic)
-
--- instance MonadIO io => ShowIO (Closure io) io where
---   showIO (Closure env body) = do
---     envRep <- showIO env
---     return $ "with " <> envRep <> "; " <> tshow body
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body

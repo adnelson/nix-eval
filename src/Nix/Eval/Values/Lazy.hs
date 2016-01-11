@@ -57,7 +57,6 @@ instance ShowIO LClosure where
     envRep <- showIO env
     return $ "with " <> envRep <> "; " <> tshow body
 
-
 -- Some type synonyms for readability. The 'L' is for lazy.
 type LNative = Native Eval
 type LEnvironment = Environment Eval
