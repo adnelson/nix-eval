@@ -5,7 +5,7 @@ import Test.QuickCheck
 import Nix.Common
 import Nix.Eval.Constants
 import Nix.Eval.Values
-import Nix.Eval.Operators
+import Nix.Eval.Values.Builtins.Operators
 import Nix.Eval.TestLib
 
 main :: IO ()

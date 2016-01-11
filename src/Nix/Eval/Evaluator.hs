@@ -1,10 +1,11 @@
 module Nix.Eval.Evaluator where
 
-import Nix.Common hiding (trace)
+import Nix.Common                       hiding (trace)
 import Nix.Eval.Constants
-import Nix.Eval.Values.Builtins (builtins, interpretBinop, interpretUnop)
 import Nix.Eval.Expressions
 import Nix.Eval.Values
+import Nix.Eval.Values.Builtins         (builtins, interpretBinop,
+                                         interpretUnop)
 import Nix.Eval.Values.NativeConversion
 
 -- | Maps a function over a list. Needs to be defined in this module
@@ -22,13 +23,15 @@ evalApply func arg = func >>= \case
     evaluate env' body
   v -> expectedFunction v
 
+-- | Builtins that are defined in the the Builtins module, plus a few
+-- that we have to define here because they reference the evaluator.
 allBuiltins :: LEnvironment
 allBuiltins = insertEnv "map" (VNative builtin_map) builtins
 
 -- | Evaluate an expression within an environment.
 evaluate :: LEnvironment -- ^ Enclosing environment.
-         -> Expression  -- ^ Expression to evaluate.
-         -> LazyValue   -- ^ Result of evaluation.
+         -> Expression   -- ^ Expression to evaluate.
+         -> LazyValue    -- ^ Result of evaluation.
 evaluate env expr = case expr of
   EConstant constant -> return $ fromConstant constant
   EVar name -> case lookupEnv name env of
@@ -63,12 +66,11 @@ evaluate env expr = case expr of
       Nothing -> throwError $ KeyError key (envKeySet set)
       Just res -> res
     val -> expectedAttrs val
-  EWith attrs expr -> do
-    -- Evaluate the attribute expression. It must be an attribute set.
-    evaluate env attrs >>= \case
-      -- Bring all of those attributes into scope.
-      VAttrSet set -> evaluate (set `unionEnv` env) expr
-      val -> expectedAttrs val
+  EWith attrs expr -> evaluate env attrs >>= \case
+    -- The expression must be an attribute set; bring into scope to
+    -- evaluate the inner expression.
+    VAttrSet set -> evaluate (set `unionEnv` env) expr
+    val -> expectedAttrs val
 
 -- | Evaluate an expression with the builtins in scope.
 performEval :: Expression -> LazyValue
