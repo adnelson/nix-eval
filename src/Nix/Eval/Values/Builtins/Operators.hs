@@ -79,32 +79,63 @@ binop_update val = case val of
     _ -> expectedAttrs v
   _ -> \_ -> expectedAttrs val
 
--- | Equality of values.
+-- | Equality of values. Forces evaluation for lists and sets.
 binop_eq :: WHNFValue -> WHNFValue -> LazyValue
-binop_eq v1 v2 = undefined -- fromBool (v1 == v2)
+binop_eq val1 val2 = case (val1, val2) of
+  (VConstant c1, VConstant c2) -> convert $ c1 == c2
+  (VAttrSet set1, VAttrSet set2)
+    | envSize set1 /= envSize set2 -> convert False
+    | otherwise -> go (envToList set1) where
+        go [] = convert True
+        go ((k, lval1):pairs) = case lookupEnv k set2 of
+          Nothing -> convert False
+          Just lval2 -> do
+            val1 <- lval1
+            val2 <- lval2
+            binop_eq val1 val2 >>= \case
+              VConstant (Bool True) -> go pairs
+              _ -> convert False
+  (VList list1, VList list2)
+    | length list1 /= length list2 -> convert False
+    | otherwise -> go (toList list1) (toList list2) where
+        go [] [] = convert True
+        go [] (_:_) = convert False
+        go (_:_) [] = convert False
+        go (lval1:lvals1) (lval2:lvals2) = do
+          val1 <- lval1
+          val2 <- lval2
+          binop_eq val1 val2 >>= \case
+            VConstant (Bool True) -> go lvals1 lvals2
+            _ -> convert False
+  (VNative (NativeValue lval1), VNative (NativeValue lval2)) -> do
+    val1 <- lval1
+    val2 <- lval2
+    binop_eq val1 val2
+  _ -> convert False
 
 -- | Inequality of values.
 binop_neq :: WHNFValue -> WHNFValue -> LazyValue
-binop_neq v1 v2 = undefined -- fromBool (v1 /= v2)
+binop_neq v1 v2 = binop_eq v1 v2 >>= \case
+  VConstant (Bool False) -> convert True
+  _ -> convert False
 
 -- | Translate a binary operator into a native (binary) function.
 interpretBinop :: NBinaryOp -> LNative (WHNFValue -> WHNFValue -> WHNFValue)
--- interpretBinop NEq = natify binop_eq
--- interpretBinop NNEq = natify binop_neq
--- interpretBinop NLt = natify $ mkBinopNum (<)
--- interpretBinop NLte = natify $ mkBinopNum (<=)
--- interpretBinop NGt = natify $ mkBinopNum (>)
--- interpretBinop NGte = natify $ mkBinopNum (>=)
+interpretBinop NEq = toNative2 binop_eq
+interpretBinop NNEq = toNative2 binop_neq
+interpretBinop NLt = toNative2 $ mkBinopNum (<)
+interpretBinop NLte = toNative2 $ mkBinopNum (<=)
+interpretBinop NGt = toNative2 $ mkBinopNum (>)
+interpretBinop NGte = toNative2 $ mkBinopNum (>=)
 interpretBinop NAnd = toNative2L binop_and
--- interpretBinop NOr = natify binop_or
--- interpretBinop NImpl = natify binop_impl
+interpretBinop NOr = toNative2L binop_or
+interpretBinop NImpl = toNative2L binop_impl
 interpretBinop NUpdate = toNative2L binop_update
--- interpretBinop NPlus = natify binop_plus
--- interpretBinop NMinus = natify $ mkBinopNum (-)
--- interpretBinop NMult = natify $ mkBinopNum (*)
--- interpretBinop NDiv = natify binop_div
--- interpretBinop NConcat = natify binop_concat
-interpretBinop _ = undefined
+interpretBinop NPlus = toNative2 binop_plus
+interpretBinop NMinus = toNative2 $ mkBinopNum (-)
+interpretBinop NMult = toNative2 $ mkBinopNum (*)
+interpretBinop NDiv = toNative2 binop_div
+interpretBinop NConcat = toNative2 binop_concat
 
 unop_not :: WHNFValue -> LazyValue
 unop_not val = case val of

@@ -94,6 +94,10 @@ data Closure m = Closure (Environment m) Expression
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
 
+-- | Get the size of an environment.
+envSize :: Environment m -> Int
+envSize (Environment e) = H.size e
+
 -- | Union two environments. Left-biased.
 unionEnv :: Environment m -> Environment m -> Environment m
 unionEnv (Environment e1) (Environment e2) = Environment (e1 `union` e2)
