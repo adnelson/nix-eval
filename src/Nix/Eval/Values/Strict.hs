@@ -21,10 +21,18 @@ type SEnvironment = Environment Identity
 type SAttrSet = AttrSet Identity
 type SClosure = Closure Identity
 
--- | Strict values can be converted into lazy values, since
+-- | Strict values can be converted into values in WHNF, since
 -- there is at that point no chance of failures.
-strictToLazy :: StrictValue -> LazyValue
-strictToLazy sval = undefined
+strictToLazy :: StrictValue -> WHNFValue
+strictToLazy = \case
+  VConstant c -> VConstant c
+  VAttrSet attrs -> VAttrSet $ transE attrs
+  VList vals -> VList $ map trans vals
+  VFunction p (Closure env e) -> VFunction p (Closure (transE env) e)
+  VNative (NativeValue v) -> VNative $ NativeValue $ trans v
+  VNative (NativeFunction f) -> error "Can't convert native functions"
+  where trans (Identity s) = return $ strictToLazy s
+        transE (Environment env) = Environment $ map trans env
 
 -- | Lazy values can be converted into 'StrictValue's. However, there
 -- is a chance that this conversion will fail, because the input might
