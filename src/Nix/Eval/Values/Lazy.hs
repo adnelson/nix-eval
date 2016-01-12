@@ -23,8 +23,8 @@ instance MonadError EvalError Eval where
 -- internally contains lazily evaluated values.
 type WHNFValue = Value Eval
 
--- | This is how we represent a lazily evaluated value: It's a
--- 'Result', which means it might be an error; but if it's not an
+-- | This is how we represent a lazily evaluated value: It's an
+-- 'Eval', which means it might be an error; but if it's not an
 -- error it will be a value in WHNF.
 type LazyValue = Eval WHNFValue
 
@@ -63,13 +63,9 @@ type LEnvironment = Environment Eval
 type LAttrSet = AttrSet Eval
 type LClosure = Closure Eval
 
--- | Wrap a value in a result.
-validR :: WHNFValue -> LazyValue
-validR = return
-
 -- | Shorthand for creating an Environment from a list.
 mkEnv :: [(Text, WHNFValue)] -> LEnvironment
-mkEnv = Environment . H.fromList . map (map validR)
+mkEnv = Environment . H.fromList . map (map pure)
 
 -- | Shorthand to create a closure from a list and an expression.
 mkClosure :: [(Text, WHNFValue)] -> Expression -> LClosure
@@ -97,7 +93,7 @@ attrsV = VAttrSet . mkEnv
 
 -- | Create a list value.
 listV :: [WHNFValue] -> WHNFValue
-listV = VList . fromList . map validR
+listV = VList . fromList . map pure
 
 -- | Create a function value.
 functionV :: Text -> LClosure -> WHNFValue
@@ -124,9 +120,9 @@ deeplyEvalLazy :: LazyValue -> Eval LazyValue
 deeplyEvalLazy lval = lval >>= deeplyEval >> return lval
 
 -- instance FromConstant LazyValue where
---   fromConstant = validR . fromConstant
---   fromConstants = validR . fromConstants
---   fromConstantSet = validR . fromConstantSet
+--   fromConstant = pure . fromConstant
+--   fromConstants = pure . fromConstants
+--   fromConstantSet = pure . fromConstantSet
 
 -- | Synonym for monadic bind, applying a function inside of a
 -- 'Result', provided the 'Result' contains a 'WHNFValue'.

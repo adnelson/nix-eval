@@ -11,7 +11,7 @@ import Nix.Eval.Values.NativeConversion
 binop_concat :: WHNFValue -> WHNFValue -> LazyValue
 binop_concat val1 val2 = case val1 of
   VList list1 -> case val2 of
-    VList list2 -> validR $ VList $ list1 <> list2
+    VList list2 -> pure $ VList $ list1 <> list2
     _ -> expectedList val2
   _ -> expectedList val1
 
@@ -38,7 +38,7 @@ mkBinopNum op val1 val2 = case val1 of
 -- | Implementation of logical AND. Short-circuits.
 binop_and :: WHNFValue -> LazyValue -> LazyValue
 binop_and val = case val of
-  VConstant (Bool False) -> \_ -> validR $ boolV False
+  VConstant (Bool False) -> \_ -> pure $ boolV False
   VConstant (Bool _) -> unwrapAndApply $ \v -> case v of
     VConstant (Bool b) -> convert b
     _ -> expectedBool v
@@ -47,7 +47,7 @@ binop_and val = case val of
 -- | Implementation of logical OR. Short-circuits.
 binop_or :: WHNFValue -> LazyValue -> LazyValue
 binop_or val = case val of
-  VConstant (Bool True) -> \_ -> validR $ boolV True
+  VConstant (Bool True) -> \_ -> pure $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \v -> case v of
     VConstant (Bool b) -> convert b
     _ -> expectedBool v
@@ -56,7 +56,7 @@ binop_or val = case val of
 -- | Implementation of logical implication. Short-circuits.
 binop_impl :: WHNFValue -> LazyValue -> LazyValue
 binop_impl val = case val of
-  VConstant (Bool False) -> \_ -> validR $ boolV True
+  VConstant (Bool False) -> \_ -> pure $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \v -> case v of
     VConstant (Bool b) -> convert b
     _ -> expectedBool v
@@ -66,7 +66,7 @@ binop_impl val = case val of
 binop_div :: WHNFValue -> WHNFValue -> LazyValue
 binop_div val1 val2 = case (val1, val2) of
   (VConstant (Int _), VConstant (Int 0)) -> throwError DivideByZero
-  (VConstant (Int i), VConstant (Int j)) -> validR $ intV (i `div` j)
+  (VConstant (Int i), VConstant (Int j)) -> pure $ intV (i `div` j)
   (_, VConstant (Int _)) -> expectedInt val1
   (VConstant (Int _), _) -> expectedInt val2
   (_, _) -> expectedInt val1
@@ -75,7 +75,7 @@ binop_div val1 val2 = case (val1, val2) of
 binop_update :: WHNFValue -> LazyValue -> LazyValue
 binop_update val = case val of
   VAttrSet set1 -> unwrapAndApply $ \v -> case v of
-    VAttrSet set2 -> validR $ VAttrSet (set2 `unionEnv` set1)
+    VAttrSet set2 -> pure $ VAttrSet (set2 `unionEnv` set1)
     _ -> expectedAttrs v
   _ -> \_ -> expectedAttrs val
 

@@ -55,13 +55,13 @@ builtin_assert val res = case val of
 -- | Get the length of a list.
 builtin_length :: WHNFValue -> LazyValue
 builtin_length val = case val of
-  VList vals -> validR $ fromInt (length vals)
+  VList vals -> pure $ fromInt (length vals)
   v -> expectedList v
 
 -- | Add to the front of a list.
 builtin_cons :: LazyValue -> WHNFValue -> LazyValue
 builtin_cons val v = case v of
-  VList list -> validR $ VList $ (val `cons` list)
+  VList list -> pure $ VList $ (val `cons` list)
   _ -> expectedList v
 
 -- | Index into list. The list is the first argument.
