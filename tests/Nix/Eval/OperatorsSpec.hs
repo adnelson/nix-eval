@@ -7,21 +7,22 @@ import Nix.Eval.Constants
 import Nix.Eval.Values
 import Nix.Eval.Values.Builtins.Operators
 import Nix.Eval.TestLib
+import Nix.Eval.Values.NativeConversion
 
 main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = describe "something" $ it "something" $ True `shouldBe` True
---  divisionSpec
+spec = do
+  divisionSpec
 
-{-
 divisionSpec :: Spec
 divisionSpec = describe "division" $ do
-  let div_ =
-  let mkInt = validR . intV
+  let div_ = toNative2 binop_div
+  let mkInt = pure . intV
   it "should divide numbers" $ do
-    applyNative div_ [mkInt 6, mkInt 3] `shouldBe` mkInt 2
-  it "should not divide by zero" $ property $ \i ->
-    applyNative div_ [mkInt i, mkInt 0] `shouldBe` errorR DivideByZero
--}
+    res <- runNativeStrictL $ applyNative2 div_ (mkInt 6) (mkInt 3)
+    res `shouldBe` Right (intV 2)
+  it "should not divide by zero" $ property $ \i -> do
+    res <- runNativeStrictL $ applyNative2 div_ (mkInt i) (mkInt 0)
+    res `shouldBe` Left DivideByZero

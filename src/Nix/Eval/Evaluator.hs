@@ -17,7 +17,7 @@ builtin_map = toNative2L' $ \func -> \case
 
 evalApply :: LazyValue -> LazyValue -> LazyValue
 evalApply func arg = func >>= \case
-  VNative (NativeFunction f) -> VNative <$> f arg
+  VNative (NativeFunction f) -> unwrapNative =<< f arg
   VFunction param (Closure cEnv body) -> do
     let env' = insertEnvLazy param arg cEnv
     evaluate env' body
@@ -38,18 +38,17 @@ evaluate env expr = case expr of
     Nothing -> throwError $ NameError name (envKeySet env)
     Just val -> val
   ELambda param body -> pure $ VFunction param $ Closure env body
-  EBinaryOp left op right -> VNative <$> do
+  EBinaryOp left op right -> do
     -- Turn the operator into a binary native function.
     let func = interpretBinop op
-    -- Apply the first argument, and get a new function.
-    partiallyApplied <- applyNative func $ evaluate env left
-    -- Apply this to the second argument.
-    applyNative partiallyApplied $ evaluate env right
-  EUnaryOp op innerExpr -> VNative <$> do
+    -- Apply the function to the two arguments and unwrap the result.
+    unwrapNative =<< (applyNative2 func (evaluate env left)
+                                        (evaluate env right))
+  EUnaryOp op innerExpr -> do
     -- Translate the operator into a native function.
     let func = interpretUnop op
     -- Apply the function to the inner expression.
-    applyNative func $ evaluate env innerExpr
+    unwrapNative =<< applyNative func (evaluate env innerExpr)
   EApply func arg -> evaluate env func `evalApply` evaluate env arg
   EList exprs -> pure $ VList $ map (evaluate env) exprs
   ENonRecursiveAttrs attrs -> do

@@ -157,7 +157,10 @@ applyNative2 (NativeFunction func) x y = do
   NativeFunction newFunc <- func x
   newFunc y
 
--- | Turn a 'Native' into a monadic 'Value'.
+-- | Turn a 'Native' into a monadic 'Value'. This is useful because
+-- objects built with 'NativeValue' are isomorphic to 'Value's.
+-- Unwrapping them here means the only 'Native' values that we need to
+-- keep around are 'NativeFunction's.
 unwrapNative :: Monad m => Native m v -> m (Value m)
 unwrapNative (NativeValue v) = v
 unwrapNative n = return $ VNative n

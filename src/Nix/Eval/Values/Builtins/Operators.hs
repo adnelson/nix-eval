@@ -139,12 +139,12 @@ interpretBinop NConcat = toNative2 binop_concat
 
 unop_not :: WHNFValue -> LazyValue
 unop_not val = case val of
-  (VConstant (Bool b)) -> convert $ not b
+  VConstant (Bool b) -> convert $ not b
   _ -> expectedBool val
 
 unop_neg :: WHNFValue -> LazyValue
 unop_neg val = case val of
-  (VConstant (Int i)) -> convert (-i)
+  VConstant (Int i) -> convert (-i)
   _ -> expectedInt val
 
 interpretUnop :: NUnaryOp -> LNative (WHNFValue -> WHNFValue)

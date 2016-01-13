@@ -37,8 +37,8 @@ strictToLazy = \case
 -- is a chance that this conversion will fail, because the input might
 -- produce an error upon evaluation. So we can only make things total
 -- by returning in the 'Eval' monad.
-valueToStrictValue :: WHNFValue -> Eval StrictValue
-valueToStrictValue val = case val of
+whnfToStrict :: WHNFValue -> Eval StrictValue
+whnfToStrict val = case val of
   VConstant c -> pure $ VConstant c
   VAttrSet attrs -> VAttrSet <$> lazyEnvToStrictEnv attrs
   VList lvals -> VList <$> do
@@ -47,7 +47,7 @@ valueToStrictValue val = case val of
   VFunction param (Closure env body) -> do
     sEnv <- lazyEnvToStrictEnv env
     return $ VFunction param (Closure sEnv body)
-  VNative (NativeValue nval) -> valueToStrictValue =<< nval
+  VNative (NativeValue nval) -> whnfToStrict =<< nval
   VNative (NativeFunction _) -> do
     throwError $ CustomError "Can't make a native function strict"
 
@@ -59,4 +59,4 @@ lazyEnvToStrictEnv env = foldM step emptyE (envToList env) where
     return (insertEnv name sval res)
 
 lazyToStrict :: LazyValue -> Eval StrictValue
-lazyToStrict lval = lval >>= valueToStrictValue
+lazyToStrict lval = lval >>= whnfToStrict

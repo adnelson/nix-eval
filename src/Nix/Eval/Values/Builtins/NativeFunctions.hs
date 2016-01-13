@@ -108,7 +108,7 @@ n_head = toNative1 builtin_head
 builtins :: LAttrSet
 builtins = do
   let arity1Natives = [
-        ("throw", toNative1 builtin_throw)
+          ("throw", toNative1 builtin_throw)
         , ("length", toNative1 builtin_length)
         , ("isAttrs", toNative1 builtin_length)
         , ("isList", toNative1 builtin_length)

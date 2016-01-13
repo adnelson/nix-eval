@@ -78,12 +78,18 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ map pure $ enumFrom RT_Null
 
-runStrict :: Expression -> IO (Either EvalError StrictValue)
-runStrict expr = run $ lazyToStrict $ performEval expr
+runStrict :: WHNFValue -> IO (Either EvalError StrictValue)
+runStrict = run . whnfToStrict
 
-runStrictWithEnv :: LEnvironment -> Expression ->
+runStrictL :: LazyValue -> IO (Either EvalError StrictValue)
+runStrictL = run . lazyToStrict
+
+evalStrict :: Expression -> IO (Either EvalError StrictValue)
+evalStrict expr = run $ lazyToStrict $ performEval expr
+
+evalStrictWithEnv :: LEnvironment -> Expression ->
                     IO (Either EvalError StrictValue)
-runStrictWithEnv env expr = run $ lazyToStrict $ evaluate env expr
+evalStrictWithEnv env expr = run $ lazyToStrict $ evaluate env expr
 
 runNativeStrict :: LNative WHNFValue ->
                    IO (Either EvalError StrictValue)
@@ -92,7 +98,6 @@ runNativeStrict = run . lazyToStrict . unwrapNative
 runNativeStrictL :: Eval (LNative WHNFValue) ->
                    IO (Either EvalError StrictValue)
 runNativeStrictL lazy = run $ lazyToStrict . unwrapNative =<< lazy
-
 
 shouldEvalTo :: Expression -> StrictValue -> Expectation
 shouldEvalTo expr val = do
@@ -104,24 +109,24 @@ shouldEvalToWithEnv env expr val = do
   result <- run $ lazyToStrict $ evaluate env expr
   result `shouldBe` pure val
 
-shouldBeError :: Show a => Eval a -> Expectation
+shouldBeError :: LazyValue -> Expectation
 shouldBeError action = do
-  res <- run action
+  res <- run $ lazyToStrict action
   shouldSatisfy res $ \case
     Left _ -> True
     _ -> False
 
-shouldBeNameError :: Show a => Eval a -> Expectation
+shouldBeNameError :: LazyValue -> Expectation
 shouldBeNameError action = do
-  res <- run action
+  res <- run $ lazyToStrict action
   shouldSatisfy res $ \case
     Left (NameError _ _) -> True
     _ -> False
 
 
-shouldBeErrorWith :: Show a => Eval a -> [String] -> Expectation
+shouldBeErrorWith :: LazyValue -> [String] -> Expectation
 shouldBeErrorWith action strings = do
-  res <- run action
+  res <- run $ lazyToStrict action
   shouldSatisfy res $ \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
@@ -151,13 +156,13 @@ shouldErrorWithEnv env expr strings = do
 shouldEval :: Expression -> Expectation
 shouldEval expr = shouldBeValid $ lazyToStrict $ performEval expr
 
-shouldEvalWith :: LEnvironment -> Expression -> Expectation
-shouldEvalWith env expr = shouldBeValid $ lazyToStrict $ evaluate env expr
+shouldEvalWithEnv :: LEnvironment -> Expression -> Expectation
+shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evaluate env expr
 
 infixl 0 `shouldEvalTo`
 
 shouldError :: Expression -> Expectation
-shouldError expr = shouldBeError $ lazyToStrict $ performEval expr
+shouldError expr = shouldBeError $ performEval expr
 
 shouldErrorWith :: Expression -> [String] -> Expectation
 shouldErrorWith = shouldErrorWithEnv allBuiltins

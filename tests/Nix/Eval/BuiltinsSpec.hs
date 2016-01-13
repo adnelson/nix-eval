@@ -13,9 +13,6 @@ import Nix.Eval.TestLib
 main :: IO ()
 main = hspec spec
 
-spec = describe "x" $ it "y" $ () `shouldBe` ()
-
-{-
 spec :: Spec
 spec = do
   constantToEnvStringSpec
@@ -37,12 +34,14 @@ valueToEnvStringSpec = describe "valueToEnvString" $ do
   it "should translate lists" $ property $ \strs -> do
     let strCs = map String strs
         expected = intercalate " " strs
-    valueToEnvString (fromConstants strCs) `shouldBe` Right expected
+    res <- run $ valueToEnvString (fromConstants strCs)
+    res `shouldBe` Right expected
   it "should translate nested lists" $ do
-    valueToEnvString (listV ["hey", listV ["yo", "hi"]])
-      `shouldBe` Right "hey yo hi"
+    res <- run $ valueToEnvString (listV ["hey", listV ["yo", "hi"]])
+    res `shouldBe` Right "hey yo hi"
   it "should not translate sets" $ do
-    valueToEnvString (attrsV [("hey", strV "hi")]) `shouldSatisfy` \case
+    res <- run $ valueToEnvString (attrsV [("hey", strV "hi")])
+    res `shouldSatisfy` \case
       Left _ -> True
       Right _ -> False
 
@@ -50,51 +49,45 @@ mkTypeTestSpec :: Spec
 mkTypeTestSpec = describe "mkTypeTest function" $ do
   it "should test types of constants correctly" $ do
     property $ \constant -> do
-      let test = mkTypeTest (typeOf constant)
-      test (fromConstant constant) `shouldBe` convert True
-  it "should test types of arbitrary values correctly" $ do
-    property $ \val rttype -> do
-      let test = mkTypeTest rttype
-      test val `shouldBe` convert (typeOf val == rttype)
+      let test = mkTypeTest (typeOfConstant constant)
+      res <- runStrictL $ test (fromConstant constant)
+      res `shouldBe` Right (convert True)
   it "should test lists correctly" $ do
     property $ \constantList -> do
-      let test = mkTypeTest RT_List
-      test (fromConstants constantList) `shouldBe` convert True
+      res <- runStrictL $ mkTypeTest RT_List $ fromConstants constantList
+      res `shouldBe` Right (convert True)
   it "should test sets correctly" $ do
     property $ \constantSet -> do
-      let test = mkTypeTest RT_AttrSet
-      test (fromConstantSet constantSet) `shouldBe` convert True
-  it "should test functions correctly" $ do
-    property $ \param closure ->
-      mkTypeTest RT_Function (VFunction param closure) `shouldBe` convert True
+      res <- runStrictL $ mkTypeTest RT_AttrSet $ fromConstantSet constantSet
+      res `shouldBe` Right (convert True)
 
 deepSeqSpec :: Spec
 deepSeqSpec = describe "deepSeq" $ do
-  let env = mkEnv [("deepSeq", toNative2L builtin_deepSeq),
-                   ("throw", toNative1 builtin_throw)]
+  let env = mkEnv [("deepSeq", VNative $ toNative2L builtin_deepSeq),
+                   ("throw", VNative $ toNative1 builtin_throw)]
   it "should error on evaluating something that contains an error" $ do
     shouldErrorWithEnv env ("deepSeq" @@ attrsE [("x", failingExpression)]
                                       @@ succeedingExpression)
                            ["CustomError", "failed on purpose"]
   it "should return the second argument if no error" $ do
-    shouldEvalWith env ("deepSeq" @@ attrsE [("x", 1)]
-                                  @@ succeedingExpression)
+    shouldEvalWithEnv env ("deepSeq" @@ attrsE [("x", 1)]
+                                     @@ succeedingExpression)
 
 headSpec :: Spec
 headSpec = describe "list head" $ do
   it "should get the head of a non-empty list" $ do
     let list = listV [fromInt 1]
-    builtin_head list `shouldBe` convert (1 :: Integer)
+    res <- runStrictL $ builtin_head list
+    res `shouldBe` Right (convert (1 :: Integer))
   it "should error on an empty list" $ do
     builtin_head (listV []) `shouldBeErrorWith` ["IndexError"]
 
 elemAtSpec :: Spec
 elemAtSpec = describe "list index" $ do
   it "should index correctly" $ do
-    builtin_elemAt (listV [intV 1, intV 2]) (fromInt 1)
-      `shouldBe` convert (2 :: Integer)
+    elem <- runStrictL $ builtin_elemAt (listV [intV 1, intV 2]) (fromInt 1)
+    elem `shouldBe` Right (convert (2 :: Integer))
   it "should error on an empty list" $ do
     property $ \(i::Int) -> do
-      builtin_elemAt (listV []) (fromInt i)
-        `shouldBeErrorWith` ["IndexError"]
--}
+      let elem = builtin_elemAt (listV []) (fromInt i)
+      elem `shouldBeErrorWith` ["IndexError"]
