@@ -1,15 +1,21 @@
 module Nix.Eval.Values.Builtins.TopLevel where
 
 import Nix.Common
+import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Eval.Values.Generic
 import Nix.Eval.Values.Lazy
 import Nix.Eval.Values.NativeConversion
 import Nix.Eval.Values.Builtins.Operators
 import Nix.Eval.Values.Builtins.NativeFunctions
 
+-- | Throws a 'NotImplemented' error with the given name. We should be
+-- able to get rid of this once the implementation is complete.
+notImplemented :: Text -> LazyValue
+notImplemented = throwError . NotImplemented
+
 -- | The `builtins` object.
-builtins :: AttrSet
-builtins = mkEnv
+builtinsObj :: LAttrSet
+builtinsObj = mkEnv
   [ ("add", nativeV $ interpretBinop NPlus)
   , ("all", nativeV $ notImplemented "all")
   , ("any", nativeV $ notImplemented "any")
@@ -63,7 +69,7 @@ builtins = mkEnv
   ]
 
 -- | The set of objects which should appear at top-level.
-topLevelBuiltins :: AttrSet
+topLevelBuiltins :: LAttrSet
 topLevelBuiltins = mkEnv
   [ ("abort", nativeV $ notImplemented "abort")
   , ("builtins", VAttrSet builtins)

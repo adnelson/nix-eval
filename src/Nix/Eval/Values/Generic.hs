@@ -14,6 +14,7 @@ import Nix.Eval.Constants
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 
 -------------------------------------------------------------------------------
 -- Values ---------------------------------------------------------------------
@@ -64,6 +65,47 @@ instance Monad m => FromConstant (m (Value m)) where
   fromConstant = return . fromConstant
   fromConstants = return . fromConstants
   fromConstantSet = return . fromConstantSet
+
+-- Convenience functions
+-- | Shorthand for creating an Environment from a list.
+mkEnv :: Monad m => [(Text, Value m)] -> Environment m
+mkEnv = Environment . H.fromList . map (map pure)
+
+-- | Shorthand to create a closure from a list and an expression.
+mkClosure :: Monad m => [(Text, Value m)] -> Expression -> Closure m
+mkClosure env expr = Closure (mkEnv env) expr
+
+-- | Create a value from a string.
+strV :: Monad m => Text -> Value m
+strV = fromConstant . String
+
+-- | Create a value from an integer.
+intV :: Monad m => Integer -> Value m
+intV = fromConstant . Int
+
+-- | Create a value from a bool.
+boolV :: Monad m => Bool -> Value m
+boolV = fromConstant . Bool
+
+-- | Create a null value.
+nullV :: Monad m => Value m
+nullV = fromConstant Null
+
+-- | Create an attribute set value.
+attrsV :: Monad m => [(Text, Value m)] -> Value m
+attrsV = VAttrSet . mkEnv
+
+-- | Create a list value.
+listV :: Monad m => [Value m] -> Value m
+listV = VList . fromList . map pure
+
+-- | Create a function value.
+functionV :: Monad m => Text -> Closure m -> Value m
+functionV param closure = VFunction param closure
+
+-- | Wrap a native into a value.
+nativeV :: Monad m => Native m v -> Value m
+nativeV = VNative
 
 -------------------------------------------------------------------------------
 -- Environments and Attribute Sets --------------------------------------------
@@ -189,6 +231,11 @@ instance NFData RuntimeType
 class MonadError EvalError m => HasRTType t m where
   typeOf :: t -> m RuntimeType
 
+-- | String representation of runtime types.
+typeToString :: RuntimeType -> Text
+typeToString = T.toLower . T.replace "RT_" "" . tshow
+
+
 -- | Constants have a runtime type which can be determined in O(1).
 typeOfConstant :: Constant -> RuntimeType
 typeOfConstant (String _) = RT_String
@@ -238,6 +285,8 @@ data EvalError
   -- ^ When we have some infinite loop going on.
   | AssertionError
   -- ^ When an assertion fails.
+  | NotImplemented Text
+  -- ^ For native functions we haven't implemented yet.
   deriving (Show, Eq, Typeable, Generic)
 
 -- | When expecting a single type.

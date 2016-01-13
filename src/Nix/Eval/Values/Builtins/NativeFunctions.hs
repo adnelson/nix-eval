@@ -87,21 +87,25 @@ mkTypeTest type_ = map convert . hasType type_
 
 -- | A bunch of runtime type checking tests.
 builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,
-  builtin_isBool, builtin_isNull :: WHNFValue -> LazyValue
+  builtin_isBool, builtin_isNull, builtin_isString, builtin_isPath
+  :: WHNFValue -> LazyValue
 builtin_isAttrs = mkTypeTest RT_AttrSet
 builtin_isList = mkTypeTest RT_List
 builtin_isFunction = mkTypeTest RT_Function
 builtin_isInt = mkTypeTest RT_Int
 builtin_isBool = mkTypeTest RT_Bool
 builtin_isNull = mkTypeTest RT_Null
+builtin_isString = mkTypeTest RT_String
+builtin_isPath = mkTypeTest RT_Path
 
 -- | Deeply evaluate the first argument, and return the second if it's
 -- the first has no errors; else error.
 builtin_deepSeq :: WHNFValue -> LazyValue -> LazyValue
 builtin_deepSeq val x = deeplyEval val >> x
 
-n_head :: LNative (WHNFValue -> WHNFValue)
-n_head = toNative1 builtin_head
+-- | Get the type of a value as a string.
+builtin_typeOf :: WHNFValue -> LazyValue
+builtin_typeOf v = convert . typeToString <$> typeOf v
 
 -- | The set of built-in functions to add to the environment before
 -- evaluation.
