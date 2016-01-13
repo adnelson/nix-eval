@@ -149,6 +149,14 @@ data Native (m :: (* -> *)) :: * -> * where
 applyNative :: Native m (Value m -> t) -> m (Value m) -> m (Native m t)
 applyNative (NativeFunction func) arg = func arg
 
+-- | Apply a native value as if it were a function, to two arguments.
+applyNative2 :: Monad m =>
+             Native m (Value m -> Value m -> t) ->
+             m (Value m) -> m (Value m) -> m (Native m t)
+applyNative2 (NativeFunction func) x y = do
+  NativeFunction newFunc <- func x
+  newFunc y
+
 -- | Turn a 'Native' into a monadic 'Value'.
 unwrapNative :: Monad m => Native m v -> m (Value m)
 unwrapNative (NativeValue v) = v

@@ -140,22 +140,26 @@ lazyEvalSpec = describe "lazy evaluation" $ do
     -- Evaluation should return without triggering the error.
     let expr = boolE True `orE` errE
     expr `shouldEvalTo` boolV True
-  -- Test the `natify` function.
-  describe "natify" $ do
-    let badArg = throwError $ CustomError "oh crap"
-    describe "when using LazyValues" $ do
+  -- Test the `toNative` class of functions.
+  describe "toNative" $ do
+    let err = CustomError "oh crap"
+    describe "when using lazy values" $ do
       it "shouldn't evaluate unless needed (arity 1)" $ do
+        -- Even though we're passing an error argument to this
+        -- function, it should still return 1 since it's lazy.
         let constFunc = toNative1L $ \(_::LazyValue) -> pure (intV 1)
-        res <- run $ strictToLazy $ unwrapNative $ applyNative constFunc badArg
-        res `shouldBe` NativeValue (pure $ intV 1)
+        res <- runNativeStrictL $ applyNative constFunc (throwError err)
+        res `shouldBe` Right (intV 1)
       it "shouldn't evaluate unless needed (arity 2)" $ do
         let constFunc2 = toNative2L $ \(v::WHNFValue) (_::LazyValue) -> pure v
-            applyNative2 = undefined
-        applyNative2 constFunc2 (pure nullV) --, badArg]
-          `shouldBe` pure (NativeValue $ pure nullV)
-    it "SHOULD evaluate even if not needed when using WHNFValue" $ do
-      let constFunc = toNative1 $ \(_::WHNFValue) -> pure (intV 1)
-      applyNative constFunc badArg `shouldBe` badArg
+        res <- runNativeStrictL $
+                 applyNative2 constFunc2 (pure nullV) (throwError err)
+        res `shouldBe` pure nullV
+    describe "when using strict values" $ do
+      it "SHOULD evaluate even if not needed when using WHNFValue" $ do
+        let constFunc = toNative1 $ \(_::WHNFValue) -> pure (intV 1)
+        res <- runNativeStrictL $ applyNative constFunc (throwError err)
+        res `shouldBe` Left err
 
 attrSetSpec :: Spec
 attrSetSpec = describe "attribute sets" $ do

@@ -78,6 +78,22 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ map pure $ enumFrom RT_Null
 
+runStrict :: Expression -> IO (Either EvalError StrictValue)
+runStrict expr = run $ lazyToStrict $ performEval expr
+
+runStrictWithEnv :: LEnvironment -> Expression ->
+                    IO (Either EvalError StrictValue)
+runStrictWithEnv env expr = run $ lazyToStrict $ evaluate env expr
+
+runNativeStrict :: LNative WHNFValue ->
+                   IO (Either EvalError StrictValue)
+runNativeStrict = run . lazyToStrict . unwrapNative
+
+runNativeStrictL :: Eval (LNative WHNFValue) ->
+                   IO (Either EvalError StrictValue)
+runNativeStrictL lazy = run $ lazyToStrict . unwrapNative =<< lazy
+
+
 shouldEvalTo :: Expression -> StrictValue -> Expectation
 shouldEvalTo expr val = do
   result <- run $ lazyToStrict $ performEval expr
