@@ -7,14 +7,16 @@ import Nix.Eval.Expressions
 import Nix.Eval.Constants
 import Nix.Eval.Values
 import Nix.Eval.Values.Builtins
+import Nix.Eval.Values.NativeConversion
 import Nix.Eval.TestLib
 
 main :: IO ()
 main = hspec spec
 
-spec :: Spec
-spec = describe "something" $ it "something" $ True `shouldBe` True
+spec = describe "x" $ it "y" $ () `shouldBe` ()
+
 {-
+spec :: Spec
 spec = do
   constantToEnvStringSpec
   valueToEnvStringSpec
@@ -68,8 +70,8 @@ mkTypeTestSpec = describe "mkTypeTest function" $ do
 
 deepSeqSpec :: Spec
 deepSeqSpec = describe "deepSeq" $ do
-  let env = mkEnv [("deepSeq", nativeV builtin_deepSeq),
-                   ("throw", nativeV builtin_throw)]
+  let env = mkEnv [("deepSeq", toNative2L builtin_deepSeq),
+                   ("throw", toNative1 builtin_throw)]
   it "should error on evaluating something that contains an error" $ do
     shouldErrorWithEnv env ("deepSeq" @@ attrsE [("x", failingExpression)]
                                       @@ succeedingExpression)

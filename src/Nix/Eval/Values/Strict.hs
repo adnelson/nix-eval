@@ -15,14 +15,13 @@ type StrictValue = Value Identity
 -- type as a "context-free context".
 type StrictValue' = Identity (Value Identity)
 
--- Some type synonyms for readability. The 'S' is for strict.
-type SNative = Native Identity
+-- | An environment containing strict values.
 type SEnvironment = Environment Identity
-type SAttrSet = AttrSet Identity
-type SClosure = Closure Identity
 
 -- | Strict values can be converted into values in WHNF, since
--- there is at that point no chance of failures.
+-- there is at that point no chance of failures (unless we encounter a
+-- native function on strict values, which will never happen unless our
+-- code structure changes dramatically at some point...)
 strictToLazy :: StrictValue -> WHNFValue
 strictToLazy = \case
   VConstant c -> VConstant c
@@ -30,7 +29,7 @@ strictToLazy = \case
   VList vals -> VList $ map trans vals
   VFunction p (Closure env e) -> VFunction p (Closure (transE env) e)
   VNative (NativeValue v) -> VNative $ NativeValue $ trans v
-  VNative (NativeFunction f) -> error "Can't convert native functions"
+  VNative (NativeFunction _) -> error "Can't convert native functions"
   where trans (Identity s) = return $ strictToLazy s
         transE (Environment env) = Environment $ map trans env
 
@@ -61,6 +60,3 @@ lazyEnvToStrictEnv env = foldM step emptyE (envToList env) where
 
 lazyToStrict :: LazyValue -> Eval StrictValue
 lazyToStrict lval = lval >>= valueToStrictValue
-
--- lazyNativeToStrict :: LNative LazyValue -> Eval (SNative StrictValue')
--- lazyNativeToStrict (NativeValue lval) = NativeValue <$> lazyToStrict lval

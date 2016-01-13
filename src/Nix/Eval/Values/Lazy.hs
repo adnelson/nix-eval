@@ -64,7 +64,7 @@ type LAttrSet = AttrSet Eval
 type LClosure = Closure Eval
 
 -- | Shorthand for creating an Environment from a list.
-mkEnv :: [(Text, WHNFValue)] -> LEnvironment
+mkEnv :: Monad m => [(Text, Value m)] -> Environment m
 mkEnv = Environment . H.fromList . map (map pure)
 
 -- | Shorthand to create a closure from a list and an expression.
@@ -72,31 +72,31 @@ mkClosure :: [(Text, WHNFValue)] -> Expression -> LClosure
 mkClosure env expr = Closure (mkEnv env) expr
 
 -- | Create a value from a string.
-strV :: Text -> WHNFValue
+strV :: Monad m => Text -> Value m
 strV = fromConstant . String
 
 -- | Create a value from an integer.
-intV :: Integer -> WHNFValue
+intV :: Monad m => Integer -> Value m
 intV = fromConstant . Int
 
 -- | Create a value from a bool.
-boolV :: Bool -> WHNFValue
+boolV :: Monad m => Bool -> Value m
 boolV = fromConstant . Bool
 
 -- | Create a null value.
-nullV :: WHNFValue
+nullV :: Monad m => Value m
 nullV = fromConstant Null
 
 -- | Create an attribute set value.
-attrsV :: [(Text, WHNFValue)] -> WHNFValue
+attrsV :: Monad m => [(Text, Value m)] -> Value m
 attrsV = VAttrSet . mkEnv
 
 -- | Create a list value.
-listV :: [WHNFValue] -> WHNFValue
+listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Text -> LClosure -> WHNFValue
+functionV :: Monad m => Text -> Closure m -> Value m
 functionV param closure = VFunction param closure
 
 -------------------------------------------------------------------------------

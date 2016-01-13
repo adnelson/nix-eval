@@ -41,9 +41,6 @@ pathToText pth = case toText pth of
   Left p -> p
   Right p -> p
 
-(.>) :: (a -> b) -> (b -> c) -> (a -> c)
-(.>) = flip (.)
-
 -- | The opposite of 'pure'; classes whose internal values can be
 -- extracted purely.
 class Extract m where

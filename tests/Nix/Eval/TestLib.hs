@@ -78,56 +78,37 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ map pure $ enumFrom RT_Null
 
-{-
-shouldEval :: Expression -> Expectation
-shouldEval expr = shouldBeValid $ runEval expr
+shouldEvalTo :: Expression -> StrictValue -> Expectation
+shouldEvalTo expr val = do
+  result <- run $ lazyToStrict $ performEval expr
+  result `shouldBe` pure val
 
-shouldEvalWith :: Environment -> Expression -> Expectation
-shouldEvalWith env expr = shouldBeValid $ evaluate env expr
+shouldEvalToWithEnv :: LEnvironment -> Expression -> StrictValue -> Expectation
+shouldEvalToWithEnv env expr val = do
+  result <- run $ lazyToStrict $ evaluate env expr
+  result `shouldBe` pure val
 
-shouldEvalTo :: Expression -> Value -> Expectation
-shouldEvalTo expr val = runEval expr `shouldBe` validR val
-
-infixl 0 `shouldEvalTo`
-
-shouldEvalToWithEnv :: Environment -> Expression -> Value -> Expectation
-shouldEvalToWithEnv env expr val = evaluate env expr
-                                   `shouldBe` (validR val)
-
-shouldError :: Expression -> Expectation
-shouldError expr = shouldBeError $ runEval expr
-
-shouldErrorWith :: Expression -> [String] -> Expectation
-shouldErrorWith = shouldErrorWithEnv allBuiltins
-
-infixl 0 `shouldErrorWith`
-
-shouldErrorWithEnv :: Environment -> Expression -> [String] -> Expectation
-shouldErrorWithEnv env expr strings =
-  evaluate env expr `shouldSatisfy` \(Result res) -> case res of
-    Left err -> all (`isInfixOf` show err) strings
+shouldBeError :: Show a => Eval a -> Expectation
+shouldBeError action = do
+  res <- run action
+  shouldSatisfy res $ \case
+    Left _ -> True
     _ -> False
 
-shouldBeValid :: Show a => Result a -> Expectation
-shouldBeValid res = shouldSatisfy res $ \case
-  Result (Left _) -> False
-  _ -> True
-
-shouldBeError :: Show a => Result a -> Expectation
-shouldBeError res = shouldSatisfy res $ \case
-  Result (Left _) -> True
-  _ -> False
-
-shouldBeErrorWith :: Show a => Result a -> [String] -> Expectation
-shouldBeErrorWith res strings = shouldSatisfy res $ \case
-  Result (Left err) -> all (`isInfixOf` show err) strings
-  _ -> False
+shouldBeNameError :: Show a => Eval a -> Expectation
+shouldBeNameError action = do
+  res <- run action
+  shouldSatisfy res $ \case
+    Left (NameError _ _) -> True
+    _ -> False
 
 
-shouldBeNameError :: Show a => Result a -> Expectation
-shouldBeNameError res = shouldSatisfy res $ \case
-  Result (Left (NameError _ _)) -> True
-  _ -> False
+shouldBeErrorWith :: Show a => Eval a -> [String] -> Expectation
+shouldBeErrorWith action strings = do
+  res <- run action
+  shouldSatisfy res $ \case
+    Left err -> all (`isInfixOf` show err) strings
+    _ -> False
 
 -- | An expression that will always fail to evaluate.
 failingExpression :: Expression
@@ -136,4 +117,33 @@ failingExpression = "throw" @@ strE "failed on purpose"
 -- | An expression that will always succeed evaluation.
 succeedingExpression :: Expression
 succeedingExpression = strE "success"
--}
+
+shouldBeValid :: Show a => Eval a -> Expectation
+shouldBeValid action = do
+  res <- run action
+  shouldSatisfy res $ \case
+    Left _ -> False
+    _ -> True
+
+shouldErrorWithEnv :: LEnvironment -> Expression -> [String] -> Expectation
+shouldErrorWithEnv env expr strings = do
+  res <- run $ lazyToStrict $ evaluate env expr
+  res `shouldSatisfy` \case
+    Left err -> all (`isInfixOf` show err) strings
+    _ -> False
+
+shouldEval :: Expression -> Expectation
+shouldEval expr = shouldBeValid $ lazyToStrict $ performEval expr
+
+shouldEvalWith :: LEnvironment -> Expression -> Expectation
+shouldEvalWith env expr = shouldBeValid $ lazyToStrict $ evaluate env expr
+
+infixl 0 `shouldEvalTo`
+
+shouldError :: Expression -> Expectation
+shouldError expr = shouldBeError $ lazyToStrict $ performEval expr
+
+shouldErrorWith :: Expression -> [String] -> Expectation
+shouldErrorWith = shouldErrorWithEnv allBuiltins
+
+infixl 0 `shouldErrorWith`

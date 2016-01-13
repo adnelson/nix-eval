@@ -9,13 +9,13 @@ import Nix.Eval.Expressions
 import Nix.Eval.TestLib
 import Nix.Eval.Values.Builtins.NativeFunctions (builtin_throw, builtin_seq)
 import Nix.Eval.Values.Builtins.Operators (binop_div)
+import Nix.Eval.Values.NativeConversion
 
 main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = describe "something" $ it "something" $ True `shouldBe` True
-{-
+spec = do --describe "something" $ it "something" $ True `shouldBe` True
   testBalloonSpec
   functionsSpec
   binopsSpec
@@ -106,18 +106,18 @@ builtinAppSpec :: Spec
 builtinAppSpec = describe "application of builtins" $ do
   it "should work with unary builtins" $ do
     -- Make an ID function builtin, and try it out.
-    let my_id = natify $ \v -> validR v
+    let my_id = toNative1 $ \v -> pure v
         env = mkEnv [("id", VNative my_id)]
     shouldEvalToWithEnv env ("id" @@ 1) (intV 1)
   it "should work with a const builtin" $ do
     -- Make a const function builtin, and try it.
-    let my_const = natify $ \v (_::LazyValue) -> validR v
+    let my_const = toNative2L $ \v (_::LazyValue) -> pure v
         env = mkEnv [("const", VNative my_const)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("const" @@ 1 @@ 2) `shouldEvalTo'` intV 1
   it "should work with a div builtin" $ do
     -- Add the division function builtin, and try it.
-    let env = mkEnv [("div", VNative $ natify binop_div)]
+    let env = mkEnv [("div", VNative $ toNative2 binop_div)]
         shouldEvalTo' = shouldEvalToWithEnv env
     ("div" @@ 10 @@ 2) `shouldEvalTo'` intV 5
 
@@ -142,17 +142,20 @@ lazyEvalSpec = describe "lazy evaluation" $ do
     expr `shouldEvalTo` boolV True
   -- Test the `natify` function.
   describe "natify" $ do
-    let badArg = errorR $ CustomError "oh crap"
+    let badArg = throwError $ CustomError "oh crap"
     describe "when using LazyValues" $ do
       it "shouldn't evaluate unless needed (arity 1)" $ do
-        let constFunc = natify $ \(_::LazyValue) -> validR (intV 1)
-        applyNative constFunc [badArg] `shouldBe` validR (intV 1)
+        let constFunc = toNative1L $ \(_::LazyValue) -> pure (intV 1)
+        res <- run $ strictToLazy $ unwrapNative $ applyNative constFunc badArg
+        res `shouldBe` NativeValue (pure $ intV 1)
       it "shouldn't evaluate unless needed (arity 2)" $ do
-        let constFunc2 = natify $ \(v::Value) (_::LazyValue) -> validR v
-        applyNative constFunc2 [validR nullV, badArg] `shouldBe` validR nullV
-    it "SHOULD evaluate even if not needed when using Value" $ do
-      let constFunc = natify $ \(_::Value) -> validR (intV 1)
-      applyNative constFunc [badArg] `shouldBe` badArg
+        let constFunc2 = toNative2L $ \(v::WHNFValue) (_::LazyValue) -> pure v
+            applyNative2 = undefined
+        applyNative2 constFunc2 (pure nullV) --, badArg]
+          `shouldBe` pure (NativeValue $ pure nullV)
+    it "SHOULD evaluate even if not needed when using WHNFValue" $ do
+      let constFunc = toNative1 $ \(_::WHNFValue) -> pure (intV 1)
+      applyNative constFunc badArg `shouldBe` badArg
 
 attrSetSpec :: Spec
 attrSetSpec = describe "attribute sets" $ do
@@ -280,4 +283,3 @@ unopsSpec = describe "unary operators" $ do
       notE (fromBool bool) `shouldEvalTo` fromBool (not bool)
     it "should work twice" $ property $ \bool -> do
       notE (notE (fromBool bool)) `shouldEvalTo` fromBool bool
--}
