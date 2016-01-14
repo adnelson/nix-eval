@@ -9,11 +9,6 @@ import Test.QuickCheck hiding (Result)
 import Nix.Common
 import Nix.Types (NBinaryOp(..))
 import Nix.Eval
-import Nix.Eval.Expressions
-import Nix.Eval.Evaluator
-import Nix.Eval.Constants
-import Nix.Eval.Values
-import Nix.Eval.Values.Builtins
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 

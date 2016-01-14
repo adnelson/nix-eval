@@ -1,8 +1,8 @@
-module Nix.Eval.Values.NativeConversion where
+module Nix.Values.NativeConversion where
 
 import Nix.Common
-import Nix.Eval.Values.Generic
-import Nix.Eval.Values.Lazy
+import Nix.Values.Generic
+import Nix.Values.Lazy
 
 -- | Aliases a function on 'WHNFValue's of arity 1.
 type WHNFFunc1 = WHNFValue -> WHNFValue

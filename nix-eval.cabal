@@ -18,8 +18,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Nix.Eval
   other-modules:       Nix.Eval.Evaluator
-                     , Nix.Eval.Values
-                     , Nix.Eval.Expressions
+                     , Nix.Values
+                     , Nix.Expressions
   build-depends:       base >=4.8 && <5
                      , classy-prelude
                      , containers

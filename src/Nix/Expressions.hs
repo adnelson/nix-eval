@@ -1,8 +1,8 @@
-module Nix.Eval.Expressions where
+module Nix.Expressions where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
-import Nix.Eval.Constants
+import Nix.Constants
 import qualified Data.HashMap.Strict as H
 
 -- | A simpler expression type than the full nix language expression; this

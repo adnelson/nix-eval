@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Nix.Eval.Constants where
+module Nix.Constants where
 
 import Nix.Common
 

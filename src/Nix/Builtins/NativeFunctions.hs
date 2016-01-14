@@ -1,11 +1,11 @@
-module Nix.Eval.Values.Builtins.NativeFunctions where
+module Nix.Builtins.NativeFunctions where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
-import Nix.Eval.Constants
-import Nix.Eval.Expressions
-import Nix.Eval.Values
-import Nix.Eval.Values.NativeConversion
+import Nix.Constants
+import Nix.Expressions
+import Nix.Values
+import Nix.Values.NativeConversion
 
 import qualified Data.Set as S
 import qualified Data.HashMap.Strict as H

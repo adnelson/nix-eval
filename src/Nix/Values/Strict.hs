@@ -1,10 +1,10 @@
-module Nix.Eval.Values.Strict where
+module Nix.Values.Strict where
 
 import Nix.Common
-import Nix.Eval.Expressions
-import Nix.Eval.Constants
-import Nix.Eval.Values.Generic
-import Nix.Eval.Values.Lazy
+import Nix.Expressions
+import Nix.Constants
+import Nix.Values.Generic
+import Nix.Values.Lazy
 
 -- | Strict values are fully evaluated (at least conceptually);
 -- internally they only contain other strict values. This means, among

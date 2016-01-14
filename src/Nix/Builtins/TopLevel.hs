@@ -1,13 +1,13 @@
-module Nix.Eval.Values.Builtins.TopLevel where
+module Nix.Builtins.TopLevel where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
-import Nix.Eval.Expressions
-import Nix.Eval.Values.Generic
-import Nix.Eval.Values.Lazy
-import Nix.Eval.Values.NativeConversion
-import Nix.Eval.Values.Builtins.Operators
-import Nix.Eval.Values.Builtins.NativeFunctions
+import Nix.Expressions
+import Nix.Values.Generic
+import Nix.Values.Lazy
+import Nix.Values.NativeConversion
+import Nix.Builtins.Operators
+import Nix.Builtins.NativeFunctions
 import Nix.Eval.Evaluator (evaluate, evalApply)
 
 -- | Evaluate an expression with the builtins in scope.

@@ -6,11 +6,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
-module Nix.Eval.Values.Generic where
+module Nix.Values.Generic where
 
 import Nix.Common
-import Nix.Eval.Expressions
-import Nix.Eval.Constants
+import Nix.Expressions
+import Nix.Constants
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq

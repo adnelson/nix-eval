@@ -3,11 +3,11 @@ module Nix.Eval.BuiltinsSpec (main, spec) where
 import Test.Hspec
 import Test.QuickCheck
 import Nix.Common
-import Nix.Eval.Expressions
-import Nix.Eval.Constants
-import Nix.Eval.Values
-import Nix.Eval.Values.Builtins
-import Nix.Eval.Values.NativeConversion
+import Nix.Expressions
+import Nix.Constants
+import Nix.Values
+import Nix.Values.NativeConversion
+import Nix.Builtins
 import Nix.Eval.TestLib
 import Nix.Eval.ExpectedBuiltins
 

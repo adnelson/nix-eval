@@ -1,11 +1,11 @@
-module Nix.Eval.Values.Builtins.Operators where
+module Nix.Builtins.Operators where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
-import Nix.Eval.Constants
-import Nix.Eval.Expressions
-import Nix.Eval.Values
-import Nix.Eval.Values.NativeConversion
+import Nix.Constants
+import Nix.Expressions
+import Nix.Values
+import Nix.Values.NativeConversion
 
 -- | Concatenation of lists.
 binop_concat :: WHNFValue -> WHNFValue -> LazyValue

@@ -1,11 +1,11 @@
 module Nix.Eval.Evaluator where
 
 import Nix.Common                       hiding (trace)
-import Nix.Eval.Constants
-import Nix.Eval.Expressions
-import Nix.Eval.Values
-import Nix.Eval.Values.Builtins.Operators (interpretBinop, interpretUnop)
-import Nix.Eval.Values.NativeConversion
+import Nix.Constants
+import Nix.Expressions
+import Nix.Builtins.Operators (interpretBinop, interpretUnop)
+import Nix.Values
+import Nix.Values.NativeConversion
 
 evalApply :: LazyValue -> LazyValue -> LazyValue
 evalApply func arg = func >>= \case

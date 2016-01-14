@@ -3,11 +3,11 @@ module Nix.Eval.OperatorsSpec (main, spec) where
 import Test.Hspec
 import Test.QuickCheck
 import Nix.Common
-import Nix.Eval.Constants
-import Nix.Eval.Values
-import Nix.Eval.Values.Builtins.Operators
+import Nix.Constants
+import Nix.Values
+import Nix.Builtins.Operators
 import Nix.Eval.TestLib
-import Nix.Eval.Values.NativeConversion
+import Nix.Values.NativeConversion
 
 main :: IO ()
 main = hspec spec

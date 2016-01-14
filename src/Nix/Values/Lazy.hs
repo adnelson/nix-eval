@@ -1,9 +1,9 @@
-module Nix.Eval.Values.Lazy where
+module Nix.Values.Lazy where
 
 import Nix.Common
-import Nix.Eval.Expressions
-import Nix.Eval.Constants
-import Nix.Eval.Values.Generic
+import Nix.Expressions
+import Nix.Constants
+import Nix.Values.Generic
 import qualified Data.HashMap.Strict as H
 
 -- | The result of evaluation: it might be an error.

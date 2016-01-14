@@ -3,13 +3,13 @@ module Nix.Eval.EvaluatorSpec (main, spec) where
 import Test.Hspec
 import Test.QuickCheck (property)
 import Nix.Common
-import Nix.Eval.Constants
-import Nix.Eval.Values
-import Nix.Eval.Expressions
+import Nix.Constants
+import Nix.Values
+import Nix.Expressions
 import Nix.Eval.TestLib
-import Nix.Eval.Values.Builtins.NativeFunctions (builtin_throw, builtin_seq)
-import Nix.Eval.Values.Builtins.Operators (binop_div)
-import Nix.Eval.Values.NativeConversion
+import Nix.Builtins.NativeFunctions (builtin_throw, builtin_seq)
+import Nix.Builtins.Operators (binop_div)
+import Nix.Values.NativeConversion
 
 main :: IO ()
 main = hspec spec
