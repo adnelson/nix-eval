@@ -2,11 +2,23 @@ module Nix.Eval.Values.Builtins.TopLevel where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
+import Nix.Eval.Expressions
 import Nix.Eval.Values.Generic
 import Nix.Eval.Values.Lazy
 import Nix.Eval.Values.NativeConversion
 import Nix.Eval.Values.Builtins.Operators
 import Nix.Eval.Values.Builtins.NativeFunctions
+import Nix.Eval.Evaluator (evaluate, evalApply)
+
+-- | Evaluate an expression with the builtins in scope.
+performEval :: Expression -> LazyValue
+performEval = evaluate topLevelBuiltins
+
+-- | Maps a function over a list.
+builtin_map :: LazyValue -> WHNFValue -> LazyValue
+builtin_map func = \case
+  VList list -> pure $ VList $ map (evalApply func) list
+  val -> expectedList val
 
 -- | Throws a 'NotImplemented' error with the given name. We should be
 -- able to get rid of this once the implementation is complete.
@@ -14,74 +26,75 @@ notImplemented :: Text -> LazyValue
 notImplemented = throwError . NotImplemented
 
 -- | The `builtins` object.
-builtinsObj :: LAttrSet
-builtinsObj = mkEnv
-  [ ("add", nativeV $ interpretBinop NPlus)
-  , ("all", nativeV $ notImplemented "all")
-  , ("any", nativeV $ notImplemented "any")
-  , ("attrNames", nativeV $ notImplemented "attrNames")
-  , ("attrValues", nativeV $ notImplemented "attrValues")
-  , ("compareVersions", nativeV $ notImplemented "compareVersions")
-  , ("concatLists", nativeV $ notImplemented "concatLists")
-  , ("currentSystem", nativeV $ notImplemented "currentSystem")
-  , ("deepSeq", nativeV builtin_deepSeq)
-  , ("div", nativeV $ interpretBinop NDiv)
-  , ("elem", nativeV $ notImplemented "elem")
-  , ("elemAt", nativeV builtin_elemAt)
-  , ("fetchurl", nativeV $ notImplemented "fetchurl")
-  , ("filter", nativeV $ notImplemented "filter")
-  , ("filterSource", nativeV $ notImplemented "filterSource")
-  , ("fromJSON", nativeV $ notImplemented "fromJSON")
-  , ("genList", nativeV $ notImplemented "genList")
-  , ("getAttr", nativeV $ notImplemented "getAttr")
-  , ("getEnv", nativeV $ notImplemented "getEnv")
-  , ("hasAttr", nativeV $ notImplemented "hasAttr")
-  , ("hashString", nativeV $ notImplemented "hashString")
-  , ("head", nativeV builtin_head)
-  , ("intersectAttrs", nativeV $ notImplemented "intersectAttrs")
-  , ("isAttrs", nativeV builtin_isAttrs)
-  , ("isBool", nativeV builtin_isBool)
-  , ("isFunction", nativeV builtin_isFunction)
-  , ("isInt", nativeV builtin_isInt)
-  , ("isList", nativeV builtin_isList)
-  , ("isString", nativeV builtin_isString)
-  , ("length", nativeV builtin_length)
-  , ("lessThan", nativeV $ interpretBinop NLt)
-  , ("listToAttrs", nativeV $ notImplemented "listToAttrs")
-  , ("mul", nativeV $ interpretBinop NMult)
-  , ("parseDrvName", nativeV $ notImplemented "parseDrvName")
-  , ("pathExists", nativeV $ notImplemented "pathExists")
-  , ("readDir", nativeV $ notImplemented "readDir")
-  , ("readFile", nativeV $ notImplemented "readFile")
-  , ("replaceStrings", nativeV $ notImplemented "replaceStrings")
-  , ("seq", nativeV builtin_seq)
-  , ("sort", nativeV $ notImplemented "sort")
-  , ("stringLength", nativeV $ notImplemented "stringLength")
-  , ("sub", nativeV $ interpretBinop NMinus)
-  , ("substring", nativeV $ notImplemented "substring")
-  , ("tail", nativeV $ notImplemented "tail")
-  , ("toFile", nativeV $ notImplemented "toFile")
-  , ("toJSON", nativeV $ notImplemented "toJSON")
-  , ("toPath", nativeV $ notImplemented "toPath")
-  , ("toXML", nativeV $ notImplemented "toXML")
-  , ("trace", nativeV $ notImplemented "trace")
-  , ("typeOf", nativeV builtin_typeOf)
+builtins :: LAttrSet
+builtins = mkEnvL
+  [ ("add", pure $ nativeV $ interpretBinop NPlus)
+  , ("all", notImplemented "all")
+  , ("any", notImplemented "any")
+  , ("attrNames", notImplemented "attrNames")
+  , ("attrValues", notImplemented "attrValues")
+  , ("compareVersions", notImplemented "compareVersions")
+  , ("concatLists", notImplemented "concatLists")
+  , ("currentSystem", notImplemented "currentSystem")
+  , ("deepSeq", pure $ nativeV $ toNative2L builtin_deepSeq)
+  , ("div", pure $ nativeV $ interpretBinop NDiv)
+  , ("elem", notImplemented "elem")
+  , ("elemAt", pure $ nativeV $ toNative2 builtin_elemAt)
+  , ("fetchurl", notImplemented "fetchurl")
+  , ("filter", notImplemented "filter")
+  , ("filterSource", notImplemented "filterSource")
+  , ("fromJSON", notImplemented "fromJSON")
+  , ("genList", notImplemented "genList")
+  , ("getAttr", notImplemented "getAttr")
+  , ("getEnv", notImplemented "getEnv")
+  , ("hasAttr", notImplemented "hasAttr")
+  , ("hashString", notImplemented "hashString")
+  , ("head", pure $ nativeV $ toNative1 builtin_head)
+  , ("intersectAttrs", notImplemented "intersectAttrs")
+  , ("isAttrs", pure $ nativeV $ toNative1 builtin_isAttrs)
+  , ("isBool", pure $ nativeV $ toNative1 builtin_isBool)
+  , ("isFunction", pure $ nativeV $ toNative1 builtin_isFunction)
+  , ("isInt", pure $ nativeV $ toNative1 builtin_isInt)
+  , ("isList", pure $ nativeV $ toNative1 builtin_isList)
+  , ("isString", pure $ nativeV $ toNative1 builtin_isString)
+  , ("length", pure $ nativeV $ toNative1 builtin_length)
+  , ("lessThan", pure $ nativeV $ interpretBinop NLt)
+  , ("listToAttrs", notImplemented "listToAttrs")
+  , ("mul", pure $ nativeV $ interpretBinop NMult)
+  , ("parseDrvName", notImplemented "parseDrvName")
+  , ("pathExists", notImplemented "pathExists")
+  , ("readDir", notImplemented "readDir")
+  , ("readFile", notImplemented "readFile")
+  , ("replaceStrings", notImplemented "replaceStrings")
+  , ("seq", pure $ nativeV $ toNative2L builtin_seq)
+  , ("sort", notImplemented "sort")
+  , ("stringLength", notImplemented "stringLength")
+  , ("sub", pure $ nativeV $ interpretBinop NMinus)
+  , ("substring", notImplemented "substring")
+  , ("tail", notImplemented "tail")
+  , ("toFile", notImplemented "toFile")
+  , ("toJSON", notImplemented "toJSON")
+  , ("toPath", notImplemented "toPath")
+  , ("toXML", notImplemented "toXML")
+  , ("trace", notImplemented "trace")
+  , ("typeOf", pure $ nativeV $ toNative1 builtin_typeOf)
   ]
 
 -- | The set of objects which should appear at top-level.
 topLevelBuiltins :: LAttrSet
-topLevelBuiltins = mkEnv
-  [ ("abort", nativeV $ notImplemented "abort")
-  , ("builtins", VAttrSet builtins)
-  , ("baseNameOf", nativeV $ notImplemented "baseNameOf")
-  , ("derivation", nativeV $ notImplemented "derivation")
-  , ("dirOf", nativeV $ notImplemented "dirOf")
-  , ("fetchTarball", nativeV $ notImplemented "fetchTarball")
-  , ("import", nativeV $ notImplemented "import")
-  , ("isNull", nativeV builtin_isNull)
-  , ("removeAttrs", nativeV $ notImplemented "removeAttrs")
-  , ("throw", nativeV builtin_throw)
-  , ("toString", nativeV builtin_toString)
-  , ("seq", nativeV builtin_seq)
-  , ("length", nativeV builtin_length)
+topLevelBuiltins = mkEnvL
+  [ ("abort", notImplemented "abort")
+  , ("baseNameOf", notImplemented "baseNameOf")
+  , ("builtins", pure $ VAttrSet builtins)
+  , ("derivation", notImplemented "derivation")
+  , ("dirOf", notImplemented "dirOf")
+  , ("fetchTarball", notImplemented "fetchTarball")
+  , ("import", notImplemented "import")
+  , ("isNull", pure $ nativeV $ toNative1 builtin_isNull)
+  , ("length", pure $ nativeV $ toNative1 builtin_length)
+  , ("map", pure $ nativeV $ toNative2L' builtin_map)
+  , ("removeAttrs", notImplemented "removeAttrs")
+  , ("seq", pure $ nativeV $ toNative2L builtin_seq)
+  , ("throw", pure $ nativeV $ toNative1 builtin_throw)
+  , ("toString", pure $ nativeV $ toNative1 builtin_toString)
   ]

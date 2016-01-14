@@ -4,16 +4,8 @@ import Nix.Common                       hiding (trace)
 import Nix.Eval.Constants
 import Nix.Eval.Expressions
 import Nix.Eval.Values
-import Nix.Eval.Values.Builtins         (builtins, interpretBinop,
-                                         interpretUnop)
+import Nix.Eval.Values.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Eval.Values.NativeConversion
-
--- | Maps a function over a list. Needs to be defined in this module
--- since it uses `evaluate` under the hood. This might not be necessary...
-builtin_map :: LNative WHNFFunc2
-builtin_map = toNative2L' $ \func -> \case
-  VList list -> pure $ VList $ map (evalApply func) list
-  val -> expectedList val
 
 evalApply :: LazyValue -> LazyValue -> LazyValue
 evalApply func arg = func >>= \case
@@ -22,11 +14,6 @@ evalApply func arg = func >>= \case
     let env' = insertEnvLazy param arg cEnv
     evaluate env' body
   v -> expectedFunction v
-
--- | Builtins that are defined in the the Builtins module, plus a few
--- that we have to define here because they reference the evaluator.
-allBuiltins :: LEnvironment
-allBuiltins = insertEnv "map" (VNative builtin_map) builtins
 
 -- | Evaluate an expression within an environment.
 evaluate :: LEnvironment -- ^ Enclosing environment.
@@ -70,7 +57,3 @@ evaluate env expr = case expr of
     -- evaluate the inner expression.
     VAttrSet set -> evaluate (set `unionEnv` env) expr
     val -> expectedAttrs val
-
--- | Evaluate an expression with the builtins in scope.
-performEval :: Expression -> LazyValue
-performEval e = evaluate allBuiltins e

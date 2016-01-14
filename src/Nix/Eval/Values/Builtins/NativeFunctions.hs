@@ -106,22 +106,3 @@ builtin_deepSeq val x = deeplyEval val >> x
 -- | Get the type of a value as a string.
 builtin_typeOf :: WHNFValue -> LazyValue
 builtin_typeOf v = convert . typeToString <$> typeOf v
-
--- | The set of built-in functions to add to the environment before
--- evaluation.
-builtins :: LAttrSet
-builtins = do
-  let arity1Natives = [
-          ("throw", toNative1 builtin_throw)
-        , ("length", toNative1 builtin_length)
-        , ("isAttrs", toNative1 builtin_length)
-        , ("isList", toNative1 builtin_length)
-        , ("isFunction", toNative1 builtin_length)
-        , ("isBool", toNative1 builtin_length)
-        , ("length", toNative1 builtin_length)
-        ]
-      arity2Natives = [
-          ("seq", toNative2L builtin_seq)
-        ]
-  mkEnv (map (map VNative) arity1Natives <>
-         map (map VNative) arity2Natives)

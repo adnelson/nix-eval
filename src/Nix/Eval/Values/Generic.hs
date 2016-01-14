@@ -71,6 +71,10 @@ instance Monad m => FromConstant (m (Value m)) where
 mkEnv :: Monad m => [(Text, Value m)] -> Environment m
 mkEnv = Environment . H.fromList . map (map pure)
 
+-- | Same as 'mkEnv' but the values are lazy.
+mkEnvL :: Monad m => [(Text, m (Value m))] -> Environment m
+mkEnvL = Environment . H.fromList
+
 -- | Shorthand to create a closure from a list and an expression.
 mkClosure :: Monad m => [(Text, Value m)] -> Expression -> Closure m
 mkClosure env expr = Closure (mkEnv env) expr

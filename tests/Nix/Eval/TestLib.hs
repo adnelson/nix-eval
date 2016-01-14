@@ -165,6 +165,6 @@ shouldError :: Expression -> Expectation
 shouldError expr = shouldBeError $ performEval expr
 
 shouldErrorWith :: Expression -> [String] -> Expectation
-shouldErrorWith = shouldErrorWithEnv allBuiltins
+shouldErrorWith = shouldErrorWithEnv topLevelBuiltins
 
 infixl 0 `shouldErrorWith`
