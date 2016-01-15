@@ -10,6 +10,7 @@ import Nix.Values.NativeConversion
 import Nix.Eval.Builtins
 import Nix.Spec.Lib
 import Nix.Spec.ExpectedBuiltins
+import qualified Data.Set as S
 
 main :: IO ()
 main = hspec spec
@@ -68,8 +69,6 @@ mkTypeTestSpec = describe "mkTypeTest function" $ do
 
 deepSeqSpec :: Spec
 deepSeqSpec = describe "deepSeq" $ do
-  -- let env = mkEnv [("deepSeq", VNative $ toNative2L builtin_deepSeq),
-  --                  ("throw", VNative $ toNative1 builtin_throw)]
   it "should error on evaluating something that contains an error" $ do
     shouldErrorWith (bi "deepSeq" @@ attrsE [("x", failingExpression)]
                                   @@ succeedingExpression)
@@ -219,17 +218,22 @@ describeBuiltinKey name = case name of
   "attrNames" -> wrapDescribe $ do
     it "should get the names of the set" $ do
       property $ \keys -> do
+        let uniqueKeys = S.toList $ S.fromList keys
         -- Make an attribute set from our random list of keys. The
         -- values are irrelevant so just make them null.
-        let aset = attrsE $ zip keys (repeat nullE)
-        eval'd <- evalStrict $ bi "attrNames" @@ aset
-        map sort eval'd `shouldBe` pure (listV (map strV $ sort keys))
+        let aset = attrsE $ zip uniqueKeys (repeat nullE)
+        -- This test is not quite as clean as it should be, due to the
+        -- problem of equality testing requiring ordering.
+        Right (VList names) <- evalStrict $ bi "attrNames" @@ aset
+        sort names `shouldBe` map (pure . strV) (fromList $ sort uniqueKeys)
   "attrValues" -> wrapDescribe $ do
     it "should get the values of the set" $ do
       property $ \constants -> do
-        let exprs :: [Expression] = map fromConstant constants
-        let aset = attrsE $ zip (map tshow [1..]) exprs
-        bi "attrValues" @@ aset `shouldEvalTo` fromConstants constants
+        let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
+        -- Similarly kind of gross due to order-based equality.
+        Right (VList values) <- evalStrict $ bi "attrValues" @@ aset
+        let eval'dConstants = map (\(Identity (VConstant c)) -> c) values
+        sort eval'dConstants `shouldBe` fromList (sort constants)
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do

@@ -146,7 +146,11 @@ type AttrSet = Environment
 
 -- | A closure is an unevaluated expression, with just an environment.
 data Closure m = Closure (Environment m) Expression
-  deriving (Eq, Ord, Generic)
+  deriving (Eq, Generic)
+
+-- | TODO: make a proper ord instance...
+instance Extract m => Ord (Closure m) where
+  Closure env _ <= Closure env' _ = env <= env'
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
