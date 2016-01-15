@@ -209,6 +209,7 @@ describeBuiltinKey name = case name of
     mkTest "list" (listE [])
     mkTest "set" (attrsE [])
     mkTest "lambda" ("x" --> "x")
+    mkTest "lambda" (bi "typeOf")
     mkTest "int" 1
     mkTest "bool" (boolE False)
   "stringLength" -> wrapDescribe $ do
