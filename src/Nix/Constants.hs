@@ -24,6 +24,7 @@ instance ToConstant Text where toConstant = String
 instance ToConstant Bool where toConstant = Bool
 instance ToConstant FilePath where toConstant = Path
 instance ToConstant Integer where toConstant = Int
+instance ToConstant Int where toConstant = Int . fromIntegral
 
 class FromConstant t where
   fromConstant :: Constant -> t

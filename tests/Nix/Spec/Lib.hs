@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-module Nix.Eval.TestLib where
+module Nix.Spec.Lib where
 
 import Data.Either
 import Test.Hspec
@@ -117,7 +117,6 @@ shouldBeNameError action = do
   shouldSatisfy res $ \case
     Left (NameError _ _) -> True
     _ -> False
-
 
 shouldBeErrorWith :: LazyValue -> [String] -> Expectation
 shouldBeErrorWith action strings = do

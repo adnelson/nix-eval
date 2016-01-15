@@ -3,7 +3,8 @@ module Nix.Eval (
   module Nix.Expressions,
   module Nix.Values,
   module Nix.Eval.Evaluator,
-  module Nix.Eval.Builtins
+  module Nix.Eval.Builtins,
+  performEval
   ) where
 
 import Nix.Constants

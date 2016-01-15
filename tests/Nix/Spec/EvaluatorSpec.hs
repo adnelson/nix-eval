@@ -1,4 +1,4 @@
-module Nix.Eval.EvaluatorSpec (main, spec) where
+module Nix.Spec.EvaluatorSpec (main, spec) where
 
 import Test.Hspec
 import Test.QuickCheck (property)
@@ -6,9 +6,9 @@ import Nix.Common
 import Nix.Constants
 import Nix.Values
 import Nix.Expressions
-import Nix.Eval.TestLib
-import Nix.Builtins.NativeFunctions (builtin_throw, builtin_seq)
-import Nix.Builtins.Operators (binop_div)
+import Nix.Spec.Lib
+import Nix.Eval.Builtins.NativeFunctions (builtin_throw, builtin_seq)
+import Nix.Eval.Builtins.Operators (binop_div)
 import Nix.Values.NativeConversion
 
 main :: IO ()
@@ -18,14 +18,12 @@ spec :: Spec
 spec = do --describe "something" $ it "something" $ True `shouldBe` True
   testBalloonSpec
   functionsSpec
-  binopsSpec
   lazyEvalSpec
   builtinAppSpec
   attrSetSpec
   withSpec
   letSpec
   listSpec
-  unopsSpec
 
 -- | Ensure that the failing expression fails, and succeeding
 -- expression succeeds.
@@ -35,56 +33,6 @@ testBalloonSpec = describe "test-balloon expressions" $ do
     shouldError failingExpression
   it "should evaluate succeeding expression" $ do
     shouldEval succeedingExpression
-
-binopsSpec :: Spec
-binopsSpec = describe "binary operators" $ do
-  describe "numerical stuff" $ do
-    it "should evaluate +" $ property $ \i j ->
-      intE i $+ intE j `shouldEvalTo` intV (i + j)
-    it "should evaluate -" $ property $ \i j ->
-      intE i $- intE j `shouldEvalTo` intV (i - j)
-    it "should evaluate *" $ property $ \i j ->
-      intE i $* intE j `shouldEvalTo` intV (i * j)
-    describe "comparison" $ do
-      it "should evaluate <" $ property $ \i j -> do
-        fromInteg i $< fromInteg j `shouldEvalTo` fromBool (i < j)
-      it "should evaluate <=" $ property $ \i j -> do
-        fromInteg i $<= fromInteg j `shouldEvalTo` fromBool (i <= j)
-      it "should evaluate >" $ property $ \i j -> do
-        fromInteg i $> fromInteg j `shouldEvalTo` fromBool (i > j)
-      it "should evaluate >=" $ property $ \i j -> do
-        fromInteg i $>= fromInteg j `shouldEvalTo` fromBool (i >= j)
-  describe "logic" $ do
-    it "should evaluate &&" $ property $ \b1 b2 ->
-      boolE b1 $&& boolE b2 `shouldEvalTo` boolV (b1 && b2)
-    it "should evaluate ||" $ property $ \b1 b2 ->
-      boolE b1 $|| boolE b2 `shouldEvalTo` boolV (b1 || b2)
-    it "should evaluate ->" $ property $ \b1 b2 ->
-      boolE b1 $-> boolE b2 `shouldEvalTo`
-        boolV (if b1 then b2 else True)
-  describe "data structures" $ do
-    it "should evaluate ++" $ property $ \list1 list2 -> do
-      fromConstants list1 $++ fromConstants list2
-        `shouldEvalTo` fromConstants (list1 <> list2)
-    it "should evaluate //" $ property $ \set1 set2 -> do
-      fromConstantSet set1 $// fromConstantSet set2
-      `shouldEvalTo` fromConstantSet (set2 <> set1)
-    it "should evaluate + for strings" $ property $ \s1 s2 -> do
-      strE s1 $+ strE s2 `shouldEvalTo` strV (s1 <> s2)
-  describe "equality" $ do
-    it "equal things are equal" $ property $ \constant -> do
-      fromConstant constant $== fromConstant constant
-        `shouldEvalTo` fromBool True
-    it "equal things are not unequal" $ property $ \constant -> do
-      fromConstant constant $!= fromConstant constant
-        `shouldEvalTo` fromBool False
-    it "unequal things are unequal" $ property $ \const1 const2 -> do
-      fromConstant const1 $== fromConstant const2
-        `shouldEvalTo` fromBool (const1 == const2)
-    it "unequal things are not equal" $ property $ \const1 const2 -> do
-      fromConstant const1 $!= fromConstant const2
-        `shouldEvalTo` fromBool (const1 /= const2)
-
 
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
@@ -134,11 +82,11 @@ lazyEvalSpec = describe "lazy evaluation" $ do
     constFunc @@ errE `shouldEvalTo` intV 1
   it "should short-circuit logical AND" $ do
     -- Evaluation should return without triggering the error.
-    let expr = boolE False `andE` errE
+    let expr = boolE False $&& errE
     expr `shouldEvalTo` boolV False
   it "should short-circuit logical OR" $ do
     -- Evaluation should return without triggering the error.
-    let expr = boolE True `orE` errE
+    let expr = boolE True $|| errE
     expr `shouldEvalTo` boolV True
   -- Test the `toNative` class of functions.
   describe "toNative" $ do
@@ -274,16 +222,3 @@ listSpec = describe "lists" $ do
         property $ \list -> do
           "length" @@ (listE (failingExpression : map fromConstant list))
             `shouldEvalTo` fromInt (length list + 1)
-
-unopsSpec :: Spec
-unopsSpec = describe "unary operators" $ do
-  describe "numeric negation" $ do
-    it "should work once" $ property $ \num -> do
-      -(fromInteg num) `shouldEvalTo` fromInteg (-num)
-    it "should work twice" $ property $ \num -> do
-      -(-(fromInteg num)) `shouldEvalTo` fromInteg num
-  describe "logical negation" $ do
-    it "should work once" $ property $ \bool -> do
-      notE (fromBool bool) `shouldEvalTo` fromBool (not bool)
-    it "should work twice" $ property $ \bool -> do
-      notE (notE (fromBool bool)) `shouldEvalTo` fromBool bool

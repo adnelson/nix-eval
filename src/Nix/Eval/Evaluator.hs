@@ -3,7 +3,7 @@ module Nix.Eval.Evaluator where
 import Nix.Common                       hiding (trace)
 import Nix.Constants
 import Nix.Expressions
-import Nix.Builtins.Operators (interpretBinop, interpretUnop)
+import Nix.Eval.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Values
 import Nix.Values.NativeConversion
 

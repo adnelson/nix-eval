@@ -156,10 +156,3 @@ instance Num Expression where
   negate = EUnaryOp NNeg
   abs = error "No absolute value for Nix expressions"
   signum = error "No sign for Nix expressions"
-
--- | Wrapper for binary `and`
-andE :: Expression -> Expression -> Expression
-andE e1 e2 = EBinaryOp e1 NAnd e2
-
-orE :: Expression -> Expression -> Expression
-orE e1 e2 = EBinaryOp e1 NOr e2

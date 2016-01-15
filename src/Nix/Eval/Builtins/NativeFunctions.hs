@@ -79,7 +79,17 @@ builtin_elemAt val1 val2 = case val1 of
 -- | Get the head of a list.
 builtin_head :: WHNFValue -> LazyValue
 builtin_head val = case val of
-  VList _ -> builtin_elemAt val (fromInt 0)
+  VList list -> case uncons list of
+    Nothing -> throwError EmptyList
+    Just (first, _) -> first
+  _ -> expectedList val
+
+-- | Get the tail of a list.
+builtin_tail :: WHNFValue -> LazyValue
+builtin_tail val = case val of
+  VList list -> case uncons list of
+    Nothing -> throwError EmptyList
+    Just (_, rest) -> pure $ VList rest
   _ -> expectedList val
 
 -- | Maps a function over a list.
@@ -96,9 +106,9 @@ mkTypeTest type_ = map convert . hasType type_
 builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,
   builtin_isBool, builtin_isNull, builtin_isString, builtin_isPath
   :: WHNFValue -> LazyValue
-builtin_isAttrs = mkTypeTest RT_AttrSet
+builtin_isAttrs = mkTypeTest RT_Set
 builtin_isList = mkTypeTest RT_List
-builtin_isFunction = mkTypeTest RT_Function
+builtin_isFunction = mkTypeTest RT_Lambda
 builtin_isInt = mkTypeTest RT_Int
 builtin_isBool = mkTypeTest RT_Bool
 builtin_isNull = mkTypeTest RT_Null
@@ -113,3 +123,8 @@ builtin_deepSeq val x = deeplyEval val >> x
 -- | Get the type of a value as a string.
 builtin_typeOf :: WHNFValue -> LazyValue
 builtin_typeOf v = convert . typeToString <$> typeOf v
+
+builtin_stringLength :: WHNFValue -> LazyValue
+builtin_stringLength = \case
+  VConstant (String s) -> convert (length s)
+  v -> expectedString v
