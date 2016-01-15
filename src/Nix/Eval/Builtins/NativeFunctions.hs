@@ -1,9 +1,10 @@
-module Nix.Builtins.NativeFunctions where
+module Nix.Eval.Builtins.NativeFunctions where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Constants
 import Nix.Expressions
+import Nix.Eval.Evaluator (evalApply)
 import Nix.Values
 import Nix.Values.NativeConversion
 
@@ -80,6 +81,12 @@ builtin_head :: WHNFValue -> LazyValue
 builtin_head val = case val of
   VList _ -> builtin_elemAt val (fromInt 0)
   _ -> expectedList val
+
+-- | Maps a function over a list.
+builtin_map :: LazyValue -> WHNFValue -> LazyValue
+builtin_map func = \case
+  VList list -> pure $ VList $ map (evalApply func) list
+  val -> expectedList val
 
 -- | Creates an `isX` function given a type to test a value against.
 mkTypeTest :: RuntimeType -> WHNFValue -> LazyValue

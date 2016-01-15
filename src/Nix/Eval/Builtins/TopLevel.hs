@@ -1,4 +1,4 @@
-module Nix.Builtins.TopLevel where
+module Nix.Eval.Builtins.TopLevel where
 
 import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
@@ -6,19 +6,9 @@ import Nix.Expressions
 import Nix.Values.Generic
 import Nix.Values.Lazy
 import Nix.Values.NativeConversion
-import Nix.Builtins.Operators
-import Nix.Builtins.NativeFunctions
-import Nix.Eval.Evaluator (evaluate, evalApply)
-
--- | Evaluate an expression with the builtins in scope.
-performEval :: Expression -> LazyValue
-performEval = evaluate topLevelBuiltins
-
--- | Maps a function over a list.
-builtin_map :: LazyValue -> WHNFValue -> LazyValue
-builtin_map func = \case
-  VList list -> pure $ VList $ map (evalApply func) list
-  val -> expectedList val
+import Nix.Eval.Builtins.Operators
+import Nix.Eval.Builtins.NativeFunctions
+import Nix.Eval.Evaluator (evaluate)
 
 -- | Throws a 'NotImplemented' error with the given name. We should be
 -- able to get rid of this once the implementation is complete.
