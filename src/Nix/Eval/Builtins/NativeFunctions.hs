@@ -37,8 +37,14 @@ valueToEnvString val = case val of
 builtin_toString :: WHNFValue -> LazyValue
 builtin_toString val = map strV $ valueToEnvString val
 
+-- | Evaluate the first argument to weak-head normal form, and as long
+-- as this first evaluation succeeds, return the second argument. If
+-- the first evaluation fails, this function fails. Note that the
+-- function body here doesn't actually /do/ anything. Simply by the
+-- fact that the first argument is in WHNF, it means that the function
+-- will fail if the first argument is an error.
 builtin_seq :: WHNFValue -> LazyValue -> LazyValue
-builtin_seq = seq
+builtin_seq = \_ -> id
 
 -- | The throw function forces an error to occur.
 builtin_throw :: WHNFValue -> LazyValue
@@ -124,7 +130,27 @@ builtin_deepSeq val x = deeplyEval val >> x
 builtin_typeOf :: WHNFValue -> LazyValue
 builtin_typeOf v = convert . typeToString <$> typeOf v
 
+-- | Get the length of a nix string.
 builtin_stringLength :: WHNFValue -> LazyValue
 builtin_stringLength = \case
   VConstant (String s) -> convert (length s)
   v -> expectedString v
+
+-- | Get all of the keys from a set as a list of strings.
+builtin_attrNames :: WHNFValue -> LazyValue
+builtin_attrNames = \case
+  VAttrSet attrs -> pure $ VList $ map (pure . strV) $ envKeyList attrs
+  v -> expectedAttrs v
+
+-- | Return a set consisting of the attributes in the set e2 that also
+-- exist in the set e1. If keys are shared, the values from the second
+-- set will appear.
+builtin_intersectAttrs :: WHNFValue -> WHNFValue -> LazyValue
+builtin_intersectAttrs = \case
+  VAttrSet (Environment set1) -> \case
+    VAttrSet (Environment set2) -> do
+      -- We flip the order of set1 and set2 here because H.intersection
+      -- will prefer the values of the first set, where we want the second.
+      pure $ VAttrSet $ Environment $ H.intersection set2 set1
+    v -> expectedAttrs v
+  v -> \_ -> expectedAttrs v

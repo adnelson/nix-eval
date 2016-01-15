@@ -166,8 +166,12 @@ envToList :: Environment m -> [(Text, m (Value m))]
 envToList (Environment env) = H.toList env
 
 -- | Get the set of keys in the environment.
-envKeySet ::Environment m -> Set Text
+envKeySet :: Environment m -> Set Text
 envKeySet (Environment env) = S.fromList $ H.keys env
+
+-- | Get a list of keys in the environment.
+envKeyList :: (IsSequence seq, Element seq ~ Text) => Environment m -> seq
+envKeyList (Environment env) = fromList $ H.keys env
 
 -- | An empty environment.
 emptyE :: Environment m
