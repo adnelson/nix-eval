@@ -82,6 +82,13 @@ deepSeqSpec = describe "deepSeq" $ do
 describeTopLevel :: Text -> Spec
 describeTopLevel name = case name of
   "map" -> wrapDescribe mapSpec
+  "isNull" -> wrapDescribe $ do
+    it "should be true for null" $ do
+      "isNull" @@ nullE `shouldEvalTo` convert True
+    it "should be false for others" $ do
+      "isNull" @@ listE [] `shouldEvalTo` convert False
+      "isNull" @@ intE 1 `shouldEvalTo` convert False
+
   name -> it "isn't written yet" $ do
     pendingWith $ "No tests yet defined for " <> show name
   where
@@ -196,12 +203,6 @@ describeBuiltinKey name = case name of
     it "should be false for others" $ do
       bi "isFunction" @@ listE [] `shouldEvalTo` convert False
       bi "isFunction" @@ intE 1 `shouldEvalTo` convert False
-  "isNull" -> wrapDescribe $ do
-    it "should be true for null" $ do
-      bi "isNull" @@ nullE `shouldEvalTo` convert True
-    it "should be false for others" $ do
-      bi "isNull" @@ listE [] `shouldEvalTo` convert False
-      bi "isNull" @@ intE 1 `shouldEvalTo` convert False
   "typeOf" -> wrapDescribe $ do
     let mkTest name e = it ("should work for " <> unpack name) $ do
           bi "typeOf" @@ e `shouldEvalTo` strV name
