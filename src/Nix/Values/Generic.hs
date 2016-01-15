@@ -221,9 +221,9 @@ data RuntimeType
   | RT_Bool
   | RT_Int
   | RT_String
-  | RT_Function
+  | RT_Lambda
   | RT_List
-  | RT_AttrSet
+  | RT_Set
   | RT_Path
   deriving (Show, Eq, Ord, Enum, Generic)
 
@@ -238,7 +238,6 @@ class MonadError EvalError m => HasRTType t m where
 -- | String representation of runtime types.
 typeToString :: RuntimeType -> Text
 typeToString = T.toLower . T.replace "RT_" "" . tshow
-
 
 -- | Constants have a runtime type which can be determined in O(1).
 typeOfConstant :: Constant -> RuntimeType
@@ -256,11 +255,11 @@ instance (MonadError EvalError m, HasRTType t m) => HasRTType (m t) m where
 
 instance (MonadError EvalError m) => HasRTType (Value m) m where
   typeOf (VConstant constant) = pure $ typeOfConstant constant
-  typeOf (VAttrSet _) = pure RT_AttrSet
+  typeOf (VAttrSet _) = pure RT_Set
   typeOf (VList _) = pure RT_List
-  typeOf (VFunction _ _) = pure RT_Function
+  typeOf (VFunction _ _) = pure RT_Lambda
   typeOf (VNative (NativeValue v)) = typeOf v
-  typeOf (VNative (NativeFunction _)) = pure RT_Function
+  typeOf (VNative (NativeFunction _)) = pure RT_Lambda
 
 hasType :: HasRTType t m => RuntimeType -> t -> m Bool
 hasType expectedType obj = do
@@ -289,6 +288,8 @@ data EvalError
   -- ^ When we have some infinite loop going on.
   | AssertionError
   -- ^ When an assertion fails.
+  | EmptyList
+  -- ^ When attempting to get the head or tail of an empty list.
   | NotImplemented Text
   -- ^ For native functions we haven't implemented yet.
   deriving (Show, Eq, Typeable, Generic)
@@ -305,7 +306,7 @@ throwExpectedType expected val = do
 
 -- | When expecting a function.
 expectedFunction :: HasRTType t m => t -> m a
-expectedFunction = throwExpectedType RT_Function
+expectedFunction = throwExpectedType RT_Lambda
 
 -- | When expecting a string.
 expectedString :: HasRTType t m => t -> m a
@@ -321,7 +322,7 @@ expectedList = throwExpectedType RT_List
 
 -- | When expecting an attribute set.
 expectedAttrs :: HasRTType t m => t -> m a
-expectedAttrs = throwExpectedType RT_AttrSet
+expectedAttrs = throwExpectedType RT_Set
 
 -- | When expecting a boolean.
 expectedBool :: HasRTType t m => t -> m a

@@ -1,10 +1,10 @@
-module Nix.Eval.ExpectedBuiltins where
+module Nix.Spec.ExpectedBuiltins where
 
 import Nix.Common
 
 -- | Variables we expect at top-level.
 topLevelKeys :: [Text]
-topLevelKeys = 
+topLevelKeys =
   [ "abort"
   , "baseNameOf"
   , "builtins"
@@ -21,7 +21,7 @@ topLevelKeys =
 
 -- | Keys we expect in the builtins set.
 keysInBuiltins :: [Text]
-keysInBuiltins = 
+keysInBuiltins =
   [ "add"
   , "all"
   , "any"
