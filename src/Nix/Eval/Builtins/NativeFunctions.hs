@@ -142,6 +142,12 @@ builtin_attrNames = \case
   VAttrSet attrs -> pure $ VList $ map (pure . strV) $ envKeyList attrs
   v -> expectedAttrs v
 
+-- | Get all of the values from a set as a list of strings.
+builtin_attrValues :: WHNFValue -> LazyValue
+builtin_attrValues = \case
+  VAttrSet attrs -> pure $ VList $ envValueList attrs
+  v -> expectedAttrs v
+
 -- | Return a set consisting of the attributes in the set e2 that also
 -- exist in the set e1. If keys are shared, the values from the second
 -- set will appear.

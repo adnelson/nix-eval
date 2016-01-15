@@ -10,7 +10,7 @@ data Constant
   | Int Integer
   | Bool Bool
   | Null
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 instance NFData Constant
 

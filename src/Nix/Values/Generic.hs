@@ -15,6 +15,7 @@ import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
+import qualified Data.Map as M
 
 -------------------------------------------------------------------------------
 -- Values ---------------------------------------------------------------------
@@ -51,6 +52,12 @@ instance Extract m => Eq (Value m) where
   VNative (NativeValue v) == VNative (NativeValue v') =
     extract v == extract v'
   _ == _ = False
+
+instance Extract m => Ord (Value m) where
+  VConstant c1 <= VConstant c2 = c1 <= c2
+  VList l1 <= VList l2 = map extract l1 <= map extract l2
+  VAttrSet a1 <= VAttrSet a2 = a1 <= a2
+  VFunction p1 e1 <= VFunction p2 e2 = p1 <= p2 && e1 <= e2
 
 instance IsString (Value m) where
   fromString = VConstant . fromString
@@ -122,20 +129,24 @@ newtype Environment m = Environment {eEnv :: HashMap Text (m (Value m))}
 instance Extract m => Eq (Environment m) where
   Environment e1 == Environment e2 = map extract e1 == map extract e2
 
--- | We also use environments to represent attribute sets, since they
--- have the same behavior (in fact the `with` construct makes this
--- correspondence explicit).
-type AttrSet = Environment
-
 -- | We can show an environment purely if the context implements extract.
 instance (Extract ctx) => Show (Environment ctx) where
   show (Environment env) = "{" <> items <> "}" where
     showPair (n, v) = unpack n <> " = " <> show (extract v)
     items = intercalate "; " $ map showPair $ H.toList env
 
+instance Extract ctx => Ord (Environment ctx) where
+  Environment e1 <= Environment e2 = toMap e1 <= toMap e2 where
+    toMap = M.fromList . H.toList . map extract
+
+-- | We also use environments to represent attribute sets, since they
+-- have the same behavior (in fact the `with` construct makes this
+-- correspondence explicit).
+type AttrSet = Environment
+
 -- | A closure is an unevaluated expression, with just an environment.
 data Closure m = Closure (Environment m) Expression
-  deriving (Eq, Generic)
+  deriving (Eq, Ord, Generic)
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
@@ -172,6 +183,10 @@ envKeySet (Environment env) = S.fromList $ H.keys env
 -- | Get a list of keys in the environment.
 envKeyList :: (IsSequence seq, Element seq ~ Text) => Environment m -> seq
 envKeyList (Environment env) = fromList $ H.keys env
+
+-- | Get a list of values in the environment.
+envValueList :: (IsSequence seq, Element seq ~ m (Value m)) => Environment m -> seq
+envValueList (Environment env) = fromList $ H.elems env
 
 -- | An empty environment.
 emptyE :: Environment m

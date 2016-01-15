@@ -216,6 +216,20 @@ describeBuiltinKey name = case name of
   "stringLength" -> wrapDescribe $ do
     it "should get the length" $ property $ \s ->
       bi "stringLength" @@ strE s `shouldEvalTo` convert (length s)
+  "attrNames" -> wrapDescribe $ do
+    it "should get the names of the set" $ do
+      property $ \keys -> do
+        -- Make an attribute set from our random list of keys. The
+        -- values are irrelevant so just make them null.
+        let aset = attrsE $ zip keys (repeat nullE)
+        eval'd <- evalStrict $ bi "attrNames" @@ aset
+        map sort eval'd `shouldBe` pure (listV (map strV $ sort keys))
+  "attrValues" -> wrapDescribe $ do
+    it "should get the values of the set" $ do
+      property $ \constants -> do
+        let exprs :: [Expression] = map fromConstant constants
+        let aset = attrsE $ zip (map tshow [1..]) exprs
+        bi "attrValues" @@ aset `shouldEvalTo` fromConstants constants
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do
