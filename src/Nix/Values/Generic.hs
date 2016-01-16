@@ -30,8 +30,8 @@ data Value m
   -- ^ Attribute set values.
   | VList (Seq (m (Value m)))
   -- ^ List values.
-  | VFunction Text (Closure m)
-  -- ^ Functions, with a parameter and a closure.
+  | VFunction Params (Closure m)
+  -- ^ Functions, with parameters and a closure.
   | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
 
@@ -39,8 +39,8 @@ instance Extract m => Show (Value m) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
   show (VAttrSet set) = show set
   show (VList vs) = show $ map extract vs
-  show (VFunction param closure) = concat [ unpack param, " => ("
-                                          , show closure, ")"]
+  show (VFunction params closure) = concat [ show params, " => ("
+                                           , show closure, ")"]
   show (VNative (NativeValue v)) = show $ extract v
   show (VNative _) = "(native function)"
 
@@ -61,11 +61,10 @@ instance Extract m => Ord (Value m) where
   VList _ <= _ = True
   VAttrSet a1 <= VAttrSet a2 = a1 <= a2
   VAttrSet _ <= _ = True
-  VFunction p1 e1 <= VFunction p2 e2 = p1 <= p2 && e1 <= e2
+  -- VFunction p1 e1 <= VFunction p2 e2 = p1 <= p2 && e1 <= e2
   VFunction _ _ <= _ = True
   VNative (NativeValue v) <= VNative (NativeValue v') = extract v <= extract v'
   VNative _ <= _ = True
-
 
 instance IsString (Value m) where
   fromString = VConstant . fromString
@@ -119,8 +118,8 @@ listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Monad m => Text -> Closure m -> Value m
-functionV param closure = VFunction param closure
+functionV :: Monad m => Params -> Closure m -> Value m
+functionV params closure = VFunction params closure
 
 -- | Wrap a native into a value.
 nativeV :: Monad m => Native m v -> Value m
@@ -181,8 +180,8 @@ insertEnv name v (Environment env) = Environment $
   H.insert name (return v) env
 
 -- | Insert a name/value into an environment, where the value is lazy.
-insertEnvLazy :: Text -> m (Value m) -> Environment m -> Environment m
-insertEnvLazy name v (Environment env) = Environment $ H.insert name v env
+insertEnvL :: Text -> m (Value m) -> Environment m -> Environment m
+insertEnvL name v (Environment env) = Environment $ H.insert name v env
 
 -- | Convert an environment to a list of (name, v).
 envToList :: Environment m -> [(Text, m (Value m))]
@@ -324,6 +323,7 @@ data EvalError
   -- ^ When an assertion fails.
   | EmptyList
   -- ^ When attempting to get the head or tail of an empty list.
+  | MissingArguments [Text]
   | NotImplemented Text
   -- ^ For native functions we haven't implemented yet.
   deriving (Show, Eq, Typeable, Generic)
