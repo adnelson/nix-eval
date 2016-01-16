@@ -4,9 +4,9 @@ import Test.Hspec
 import Test.QuickCheck (property)
 import Nix.Common
 import Nix.Constants
-import Nix.Values
+import Nix.Values hiding (WHNFValue, LazyValue)
 import Nix.Expressions
-import Nix.Spec.Lib
+import Nix.Spec.Lib as Lib
 import Nix.Eval.Builtins.NativeFunctions (builtin_throw, builtin_seq)
 import Nix.Eval.Builtins.Operators (binop_div)
 import Nix.Values.NativeConversion

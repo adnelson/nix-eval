@@ -8,7 +8,7 @@ import Nix.Values
 import Nix.Values.NativeConversion
 
 -- | Concatenation of lists.
-binop_concat :: WHNFValue -> WHNFValue -> LazyValue
+binop_concat :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 binop_concat val1 val2 = case val1 of
   VList list1 -> case val2 of
     VList list2 -> pure $ VList $ list1 <> list2
@@ -16,7 +16,7 @@ binop_concat val1 val2 = case val1 of
   _ -> expectedList val1
 
 -- | Implementation of binary addition.
-binop_plus :: WHNFValue -> WHNFValue -> LazyValue
+binop_plus :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 binop_plus val1 val2 = case val1 of
   VConstant (String s) -> case val2 of
     VConstant (String s') -> convert $ s <> s'
@@ -27,8 +27,8 @@ binop_plus val1 val2 = case val1 of
   _ -> expectedOneOf [RT_String, RT_Int] val1
 
 -- | Generates a binary operation on integers.
-mkBinopNum :: ToConstant t => (Integer -> Integer -> t)
-           -> (WHNFValue -> WHNFValue -> LazyValue)
+mkBinopNum :: Monad m => ToConstant t => (Integer -> Integer -> t)
+           -> (WHNFValue m -> WHNFValue m -> LazyValue m)
 mkBinopNum op val1 val2 = case val1 of
   VConstant (Int i) -> case val2 of
     VConstant (Int i') -> convert $ op i i'
@@ -36,7 +36,7 @@ mkBinopNum op val1 val2 = case val1 of
   _ -> expectedInt val1
 
 -- | Implementation of logical AND. Short-circuits.
-binop_and :: WHNFValue -> LazyValue -> LazyValue
+binop_and :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
 binop_and val = case val of
   VConstant (Bool False) -> \_ -> pure $ boolV False
   VConstant (Bool _) -> unwrapAndApply $ \v -> case v of
@@ -45,7 +45,7 @@ binop_and val = case val of
   _ -> \_ -> expectedBool val
 
 -- | Implementation of logical OR. Short-circuits.
-binop_or :: WHNFValue -> LazyValue -> LazyValue
+binop_or :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
 binop_or val = case val of
   VConstant (Bool True) -> \_ -> pure $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \v -> case v of
@@ -54,7 +54,7 @@ binop_or val = case val of
   _ -> \_ -> expectedBool val
 
 -- | Implementation of logical implication. Short-circuits.
-binop_impl :: WHNFValue -> LazyValue -> LazyValue
+binop_impl :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
 binop_impl val = case val of
   VConstant (Bool False) -> \_ -> pure $ boolV True
   VConstant (Bool _) -> unwrapAndApply $ \v -> case v of
@@ -63,7 +63,7 @@ binop_impl val = case val of
   _ -> \_ -> expectedBool val
 
 -- | Builtin division function; prevents divide-by-zero
-binop_div :: WHNFValue -> WHNFValue -> LazyValue
+binop_div :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 binop_div val1 val2 = case (val1, val2) of
   (VConstant (Int _), VConstant (Int 0)) -> throwError DivideByZero
   (VConstant (Int i), VConstant (Int j)) -> pure $ intV (i `div` j)
@@ -72,7 +72,7 @@ binop_div val1 val2 = case (val1, val2) of
   (_, _) -> expectedInt val1
 
 -- | Adds all of the keys from the second set into the first.
-binop_update :: WHNFValue -> LazyValue -> LazyValue
+binop_update :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
 binop_update val = case val of
   VAttrSet set1 -> unwrapAndApply $ \v -> case v of
     VAttrSet set2 -> pure $ VAttrSet (set2 `unionEnv` set1)
@@ -80,7 +80,7 @@ binop_update val = case val of
   _ -> \_ -> expectedAttrs val
 
 -- | Equality of values. Forces evaluation for lists and sets.
-binop_eq :: WHNFValue -> WHNFValue -> LazyValue
+binop_eq :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 binop_eq val1 val2 = case (val1, val2) of
   (VConstant c1, VConstant c2) -> convert $ c1 == c2
   (VAttrSet set1, VAttrSet set2)
@@ -114,13 +114,15 @@ binop_eq val1 val2 = case (val1, val2) of
   _ -> convert False
 
 -- | Inequality of values.
-binop_neq :: WHNFValue -> WHNFValue -> LazyValue
+binop_neq :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 binop_neq v1 v2 = binop_eq v1 v2 >>= \case
   VConstant (Bool False) -> convert True
   _ -> convert False
 
 -- | Translate a binary operator into a native (binary) function.
-interpretBinop :: NBinaryOp -> LNative (WHNFValue -> WHNFValue -> WHNFValue)
+interpretBinop :: Monad m =>
+                  NBinaryOp ->
+                  LNative m (WHNFValue m -> WHNFValue m -> WHNFValue m)
 interpretBinop NEq = toNative2 binop_eq
 interpretBinop NNEq = toNative2 binop_neq
 interpretBinop NLt = toNative2 $ mkBinopNum (<)
@@ -137,16 +139,18 @@ interpretBinop NMult = toNative2 $ mkBinopNum (*)
 interpretBinop NDiv = toNative2 binop_div
 interpretBinop NConcat = toNative2 binop_concat
 
-unop_not :: WHNFValue -> LazyValue
+unop_not :: Monad m => WHNFValue m -> LazyValue m
 unop_not val = case val of
   VConstant (Bool b) -> convert $ not b
   _ -> expectedBool val
 
-unop_neg :: WHNFValue -> LazyValue
+unop_neg :: Monad m => WHNFValue m -> LazyValue m
 unop_neg val = case val of
   VConstant (Int i) -> convert (-i)
   _ -> expectedInt val
 
-interpretUnop :: NUnaryOp -> LNative (WHNFValue -> WHNFValue)
+interpretUnop :: Monad m =>
+                 NUnaryOp ->
+                 LNative m (WHNFValue m -> WHNFValue m)
 interpretUnop NNeg = toNative1 unop_neg
 interpretUnop NNot = toNative1 unop_not
