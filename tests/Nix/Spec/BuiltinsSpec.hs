@@ -10,6 +10,7 @@ import Nix.Values.NativeConversion
 import Nix.Eval.Builtins
 import Nix.Spec.Lib
 import Nix.Spec.ExpectedBuiltins
+import qualified Data.Set as S
 
 main :: IO ()
 main = hspec spec
@@ -68,8 +69,6 @@ mkTypeTestSpec = describe "mkTypeTest function" $ do
 
 deepSeqSpec :: Spec
 deepSeqSpec = describe "deepSeq" $ do
-  -- let env = mkEnv [("deepSeq", VNative $ toNative2L builtin_deepSeq),
-  --                  ("throw", VNative $ toNative1 builtin_throw)]
   it "should error on evaluating something that contains an error" $ do
     shouldErrorWith (bi "deepSeq" @@ attrsE [("x", failingExpression)]
                                   @@ succeedingExpression)
@@ -216,6 +215,45 @@ describeBuiltinKey name = case name of
   "stringLength" -> wrapDescribe $ do
     it "should get the length" $ property $ \s ->
       bi "stringLength" @@ strE s `shouldEvalTo` convert (length s)
+  "attrNames" -> wrapDescribe $ do
+    it "should get the names of the set" $ do
+      property $ \keys -> do
+        let uniqueKeys = S.toList $ S.fromList keys
+        -- Make an attribute set from our random list of keys. The
+        -- values are irrelevant so just make them null.
+        let aset = attrsE $ zip uniqueKeys (repeat nullE)
+        -- This test is not quite as clean as it should be, due to the
+        -- problem of equality testing requiring ordering.
+        Right (VList names) <- evalStrict $ bi "attrNames" @@ aset
+        sort names `shouldBe` map (pure . strV) (fromList $ sort uniqueKeys)
+  "attrValues" -> wrapDescribe $ do
+    it "should get the values of the set" $ do
+      property $ \constants -> do
+        let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
+        -- Similarly kind of gross due to order-based equality.
+        Right (VList values) <- evalStrict $ bi "attrValues" @@ aset
+        let eval'dConstants = map (\(Identity (VConstant c)) -> c) values
+        sort eval'dConstants `shouldBe` fromList (sort constants)
+  "intersectAttrs" -> wrapDescribe $ do
+    it "a set intersected with itself should equal itself" $ do
+      property $ \constants -> do
+        let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
+        asetEval'd <- evalStrict aset
+        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ aset @@ aset
+        asetEval'd `shouldBe` intersectedEval'd
+    it "a set intersected with empty should be empty" $ do
+      property $ \constants -> do
+        let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
+        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ aset @@ attrsE []
+        intersectedEval'd `shouldBe` pure (attrsV [])
+        -- Reverse the order.
+        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ attrsE [] @@ aset
+        intersectedEval'd `shouldBe` pure (attrsV [])
+    it "should favor the second dictionary" $ do
+      let (set1, set2) = (attrsE [("foo", 1)], attrsE [("foo", 2)])
+      bi "intersectAttrs" @@ set1 @@ set2 `shouldEvalTo` attrsV [("foo", intV 2)]
+
+
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do
