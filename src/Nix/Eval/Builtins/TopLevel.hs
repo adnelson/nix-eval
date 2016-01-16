@@ -40,7 +40,7 @@ builtins = mkEnvL
   , ("hasAttr", notImplemented "hasAttr")
   , ("hashString", notImplemented "hashString")
   , ("head", pure $ nativeV $ toNative1 builtin_head)
-  , ("intersectAttrs", notImplemented "intersectAttrs")
+  , ("intersectAttrs", pure $ nativeV $ toNative2 builtin_intersectAttrs)
   , ("isAttrs", pure $ nativeV $ toNative1 builtin_isAttrs)
   , ("isBool", pure $ nativeV $ toNative1 builtin_isBool)
   , ("isFunction", pure $ nativeV $ toNative1 builtin_isFunction)

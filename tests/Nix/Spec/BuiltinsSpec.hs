@@ -234,6 +234,26 @@ describeBuiltinKey name = case name of
         Right (VList values) <- evalStrict $ bi "attrValues" @@ aset
         let eval'dConstants = map (\(Identity (VConstant c)) -> c) values
         sort eval'dConstants `shouldBe` fromList (sort constants)
+  "intersectAttrs" -> wrapDescribe $ do
+    it "a set intersected with itself should equal itself" $ do
+      property $ \constants -> do
+        let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
+        asetEval'd <- evalStrict aset
+        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ aset @@ aset
+        asetEval'd `shouldBe` intersectedEval'd
+    it "a set intersected with empty should be empty" $ do
+      property $ \constants -> do
+        let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
+        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ aset @@ attrsE []
+        intersectedEval'd `shouldBe` pure (attrsV [])
+        -- Reverse the order.
+        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ attrsE [] @@ aset
+        intersectedEval'd `shouldBe` pure (attrsV [])
+    it "should favor the second dictionary" $ do
+      let (set1, set2) = (attrsE [("foo", 1)], attrsE [("foo", 2)])
+      bi "intersectAttrs" @@ set1 @@ set2 `shouldEvalTo` attrsV [("foo", intV 2)]
+
+
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do

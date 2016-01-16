@@ -53,11 +53,19 @@ instance Extract m => Eq (Value m) where
     extract v == extract v'
   _ == _ = False
 
+-- TODO: this is still incomplete
 instance Extract m => Ord (Value m) where
   VConstant c1 <= VConstant c2 = c1 <= c2
+  VConstant _ <= _ = True
   VList l1 <= VList l2 = map extract l1 <= map extract l2
+  VList _ <= _ = True
   VAttrSet a1 <= VAttrSet a2 = a1 <= a2
+  VAttrSet _ <= _ = True
   VFunction p1 e1 <= VFunction p2 e2 = p1 <= p2 && e1 <= e2
+  VFunction _ _ <= _ = True
+  VNative (NativeValue v) <= VNative (NativeValue v') = extract v <= extract v'
+  VNative _ <= _ = True
+
 
 instance IsString (Value m) where
   fromString = VConstant . fromString
@@ -307,6 +315,9 @@ data EvalError
   -- ^ For division.
   | CustomError Text
   -- ^ Some custom error message (e.g. from a user).
+  | AbortExecution Text
+  -- ^ When this error is raised, execution will be aborted without
+  -- the ability to recover.
   | InfiniteRecursion
   -- ^ When we have some infinite loop going on.
   | AssertionError
