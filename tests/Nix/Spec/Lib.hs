@@ -6,6 +6,7 @@ module Nix.Spec.Lib where
 import Data.Either
 import Test.Hspec
 import Test.QuickCheck hiding (Result)
+import Nix.Types (Formals(..))
 import Nix.Common
 import Nix.Types (NBinaryOp(..))
 import Nix.Eval hiding (WHNFValue, LazyValue, LEnvironment,
@@ -49,7 +50,7 @@ instance Monad m => Arbitrary (Value m) where
     [ VConstant <$> arbitrary
     , VAttrSet <$> arbitrary
     , VList <$> map (map return) arbitrary
-    , VFunction <$> arbitrary <*> arbitrary
+    , VFunction <$> (FormalName <$> arbitrary) <*> arbitrary
     , VNative . NativeValue . return <$> arbitrary ]
 
 instance Monad m => Arbitrary (Environment m) where
@@ -73,7 +74,7 @@ instance Arbitrary EvalError where
     ]
 
 instance Arbitrary RuntimeType where
-  arbitrary = oneof $ map pure $ enumFrom RT_Null
+  arbitrary = oneof $ pure <$> enumFrom RT_Null
 
 -- | The monad we're using to test things in.
 type TestM = IO

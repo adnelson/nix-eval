@@ -12,8 +12,8 @@ module Nix.Common (
   module Control.DeepSeq,
   module Control.Monad.Identity,
   module Control.Monad.Except,
-  Extract(..), ShowIO(..),
-  pathToText
+  Extract(..), ShowIO(..), Record,
+  pathToText, mapToRecord
   ) where
 
 import           ClassyPrelude              hiding (FilePath, asList, assert,
@@ -34,6 +34,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Filesystem.Path.CurrentOS  hiding (concat, empty, null, (<.>))
 import           GHC.Generics
+import qualified Data.Map                   as M
 
 -- | Convert a FilePath into Text.
 pathToText :: FilePath -> Text
@@ -69,3 +70,8 @@ instance (Show a, ShowIO b) => ShowIO (Either a b) where
 
 instance (Show a, ShowIO b) => ShowIO (ExceptT a IO b) where
   showIO action = showIO =<< runExceptT action
+
+type Record = HashMap Text
+
+mapToRecord :: Map Text t -> Record t
+mapToRecord = H.fromList . M.toList

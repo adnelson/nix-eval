@@ -2,6 +2,7 @@ module Nix.Spec.EvaluatorSpec (main, spec) where
 
 import Test.Hspec
 import Test.QuickCheck (property)
+import Nix.Types (FormalParamSet(..), Formals(..))
 import Nix.Common
 import Nix.Constants
 import Nix.Values hiding (WHNFValue, LazyValue)
@@ -10,6 +11,8 @@ import Nix.Spec.Lib as Lib
 import Nix.Eval.Builtins.NativeFunctions (builtin_throw, builtin_seq)
 import Nix.Eval.Builtins.Operators (binop_div)
 import Nix.Values.NativeConversion
+import qualified Data.Map as M
+import qualified Data.Set as S
 
 main :: IO ()
 main = hspec spec
@@ -37,16 +40,65 @@ testBalloonSpec = describe "test-balloon expressions" $ do
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
   it "should evaluate the identity function" $ do
-    shouldEvalToWithEnv emptyE ("x" --> "x") (functionV "x" (emptyC "x"))
+    shouldEvalToWithEnv emptyE ("x" --> "x")
+                               (functionV (FormalName "x") (emptyC "x"))
   it "should evaluate nested functions" $ do
     shouldEvalToWithEnv emptyE ("x" --> "y" --> "x")
-                               (functionV "x" (emptyC (ELambda "y" "x")))
+                               (functionV (FormalName "x")
+                                          (emptyC ("y" --> "x")))
   it "should evaluate function applications" $ do
     let expr = ("x" --> "x") @@ (strE "hello")
     expr `shouldEvalTo` "hello"
   it "should capture environment in closure" $ do
     let env = mkEnv [("x", intV 1)]
     shouldEvalToWithEnv env (("foo" --> "x") @@ intE 2) (intV 1)
+  describe "unpacking arguments" $ do
+    describe "without defaults" $ do
+      let mkParams = FixedParamSet . M.fromList . map (\p -> (p, Nothing))
+      let params = mkParams ["foo", "bar"]
+      let func = ELambda (FormalSet params Nothing) ("foo" + "bar")
+      it "should unpack attribute sets" $ do
+        func @@ attrsE [("foo", 1), ("bar", 2)] `shouldEvalTo` intV 3
+      it "should fail if argument is not a set" $ do
+        func @@ 1 `shouldErrorWith` ["TypeError"]
+      it "should fail if an argument is missing" $ do
+        func @@ attrsE [("foo", 1)]
+          `shouldErrorWith` ["MissingArguments", "bar"]
+      it "should report all missing arguments" $ do
+        Left (MissingArguments args) <- evalStrict (func @@ attrsE [])
+        S.fromList args `shouldBe` S.fromList ["foo", "bar"]
+      it "should allow assigning the argument to a variable" $ do
+        let func = ELambda (FormalSet params (Just "args")) ("args" !. "foo")
+        func @@ attrsE [("foo", 1), ("bar", nullE)] `shouldEvalTo` intV 1
+      it "should fail if extra args passed to fixed param set" $ do
+        func @@ attrsE [("foo", 1), ("bar", 2), ("baz", 3)]
+          `shouldErrorWith` ["ExtraArguments", "baz"]
+    describe "default arguments" $ do
+      let params = FixedParamSet $ M.fromList [("foo", Nothing),
+                                               ("bar", Just 1)]
+          func = ELambda (FormalSet params Nothing) ("foo" + "bar")
+      it "should allow default arguments" $ do
+        func @@ attrsE [("foo", 2)] `shouldEvalTo` intV 3
+      it "should let the default arguments be overridden" $ do
+        func @@ attrsE [("foo", 2), ("bar", 5)] `shouldEvalTo` intV 7
+      it "should allow defaults to refer to captured variables" $ do
+        let params = FixedParamSet $ M.fromList [("foo", Nothing),
+                                                 ("bar", Just ("blaz" + 2))]
+        let func = letE "blaz" 6 $
+                     ELambda (FormalSet params Nothing) ("foo" + "bar")
+        func @@ attrsE [("foo", 4)] `shouldEvalTo` intV 12
+      it "should allow defaults to refer to other arguments" $ do
+        let params = FixedParamSet $ M.fromList [("foo", Nothing),
+                                                 ("bar", Just ("foo" + 2))]
+        let func = ELambda (FormalSet params Nothing) ("foo" + "bar")
+        func @@ attrsE [("foo", 4)] `shouldEvalTo` intV 10
+      it "should allow defaults to refer to the arguments name" $ do
+        let params = FixedParamSet $ M.fromList [("foo", Just "args"),
+                                                 ("bar", Nothing)]
+        let func = ELambda (FormalSet params (Just "args"))
+                     (("foo" !. "bar") + 2)
+        pendingWith "getting infinite loops here :("
+        func @@ attrsE [("bar", 9)] `shouldEvalTo` intV 11
 
 -- | Test the evaluation of builtins (not the builtins themselves, but
 -- that an arbitrary builtin is correctly evaluated)
