@@ -5,7 +5,7 @@ import Nix.Common                       hiding (trace)
 import Nix.Constants
 import Nix.Expressions
 import Nix.Eval.Builtins.Operators (interpretBinop, interpretUnop)
-import Nix.Types (Formals(..))
+import Nix.Types (Formals(..), FormalParamSet(..))
 import Nix.Values
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
@@ -47,7 +47,19 @@ evalApply func arg = func >>= \case
             Just name -> insertEnvL name arg callingEnv'
         case missing of
           _:_ -> throwError $ MissingArguments missing
-          _ -> evaluate callingEnv body
+          _ -> case params of
+            VariadicParamSet _ -> evaluate callingEnv body
+            -- We need to make sure there aren't any extra arguments.
+            FixedParamSet ps -> do
+              let keyList :: [Text] = envKeyList argSet
+                  -- For each key, we'll check if it's in the params,
+                  -- and otherwise it's an `ExtraArguments` error.
+                  getExtra extraKeys key = case M.lookup key ps of
+                    Nothing -> (key:extraKeys)
+                    Just _ -> extraKeys
+              case foldl' getExtra [] keyList of
+                [] -> evaluate callingEnv body
+                extras -> throwError $ ExtraArguments extras
       v -> expectedAttrs v
   v -> expectedFunction v
 

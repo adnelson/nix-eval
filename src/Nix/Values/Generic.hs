@@ -324,6 +324,9 @@ data EvalError
   | EmptyList
   -- ^ When attempting to get the head or tail of an empty list.
   | MissingArguments [Text]
+  -- ^ When not enough arguments are passed to a function.
+  | ExtraArguments [Text]
+  -- ^ When too many arguments are passed to a function.
   | NotImplemented Text
   -- ^ For native functions we haven't implemented yet.
   deriving (Show, Eq, Typeable, Generic)

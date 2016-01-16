@@ -62,13 +62,17 @@ functionsSpec = describe "functions" $ do
       it "should fail if argument is not a set" $ do
         func @@ 1 `shouldErrorWith` ["TypeError"]
       it "should fail if an argument is missing" $ do
-        func @@ attrsE [("foo", 1)] `shouldErrorWith` ["MissingArguments"]
+        func @@ attrsE [("foo", 1)]
+          `shouldErrorWith` ["MissingArguments", "bar"]
       it "should report all missing arguments" $ do
         Left (MissingArguments args) <- evalStrict (func @@ attrsE [])
         S.fromList args `shouldBe` S.fromList ["foo", "bar"]
       it "should allow assigning the argument to a variable" $ do
         let func = ELambda (FormalSet params (Just "args")) ("args" !. "foo")
         func @@ attrsE [("foo", 1), ("bar", nullE)] `shouldEvalTo` intV 1
+      it "should fail if extra args passed to fixed param set" $ do
+        func @@ attrsE [("foo", 1), ("bar", 2), ("baz", 3)]
+          `shouldErrorWith` ["ExtraArguments", "baz"]
     describe "default arguments" $ do
       let params = FixedParamSet $ M.fromList [("foo", Nothing),
                                                ("bar", Just 1)]
