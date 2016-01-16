@@ -22,7 +22,7 @@ type SEnvironment = Environment Identity
 -- there is at that point no chance of failures (unless we encounter a
 -- native function on strict values, which will never happen unless our
 -- code structure changes dramatically at some point...)
-strictToLazy :: StrictValue -> WHNFValue
+strictToLazy :: Monad m => StrictValue -> WHNFValue m
 strictToLazy = \case
   VConstant c -> VConstant c
   VAttrSet attrs -> VAttrSet $ transE attrs
@@ -37,7 +37,7 @@ strictToLazy = \case
 -- is a chance that this conversion will fail, because the input might
 -- produce an error upon evaluation. So we can only make things total
 -- by returning in the 'Eval' monad.
-whnfToStrict :: WHNFValue -> Eval StrictValue
+whnfToStrict :: Monad m => WHNFValue m -> Eval m StrictValue
 whnfToStrict val = case val of
   VConstant c -> pure $ VConstant c
   VAttrSet attrs -> VAttrSet <$> lazyEnvToStrictEnv attrs
@@ -52,11 +52,11 @@ whnfToStrict val = case val of
     throwError $ CustomError "Can't make a native function strict"
 
 -- | Convert a lazy Environment to one containing only strict values.
-lazyEnvToStrictEnv :: LEnvironment -> Eval SEnvironment
+lazyEnvToStrictEnv :: Monad m => LEnvironment m -> Eval m SEnvironment
 lazyEnvToStrictEnv env = foldM step emptyE (envToList env) where
   step res (name, lval) = do
     sval <- lazyToStrict lval
     return (insertEnv name sval res)
 
-lazyToStrict :: LazyValue -> Eval StrictValue
+lazyToStrict :: Monad m => LazyValue m -> Eval m StrictValue
 lazyToStrict lval = lval >>= whnfToStrict

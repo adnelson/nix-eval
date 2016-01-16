@@ -12,11 +12,11 @@ import Nix.Eval.Evaluator (evaluate)
 
 -- | Throws a 'NotImplemented' error with the given name. We should be
 -- able to get rid of this once the implementation is complete.
-notImplemented :: Text -> LazyValue
+notImplemented :: Monad m => Text -> LazyValue m
 notImplemented = throwError . NotImplemented
 
 -- | The `builtins` object.
-builtins :: LAttrSet
+builtins :: Monad m => LAttrSet m
 builtins = mkEnvL
   [ ("add", pure $ nativeV $ interpretBinop NPlus)
   , ("all", notImplemented "all")
@@ -71,7 +71,7 @@ builtins = mkEnvL
   ]
 
 -- | The set of objects which should appear at top-level.
-topLevelBuiltins :: LAttrSet
+topLevelBuiltins :: Monad m => LAttrSet m
 topLevelBuiltins = mkEnvL
   [ ("abort", notImplemented "abort")
   , ("baseNameOf", notImplemented "baseNameOf")

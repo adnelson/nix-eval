@@ -7,7 +7,7 @@ import Nix.Eval.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Values
 import Nix.Values.NativeConversion
 
-evalApply :: LazyValue -> LazyValue -> LazyValue
+evalApply :: Monad m => LazyValue m -> LazyValue m -> LazyValue m
 evalApply func arg = func >>= \case
   VNative (NativeFunction f) -> unwrapNative =<< f arg
   VFunction param (Closure cEnv body) -> do
@@ -16,9 +16,10 @@ evalApply func arg = func >>= \case
   v -> expectedFunction v
 
 -- | Evaluate an expression within an environment.
-evaluate :: LEnvironment -- ^ Enclosing environment.
-         -> Expression   -- ^ Expression to evaluate.
-         -> LazyValue    -- ^ Result of evaluation.
+evaluate :: Monad m =>
+            LEnvironment m -> -- ^ Enclosing environment.
+            Expression     -> -- ^ Expression to evaluate.
+            LazyValue m       -- ^ Result of evaluation.
 evaluate env expr = case expr of
   EConstant constant -> return $ fromConstant constant
   EVar name -> case lookupEnv name env of

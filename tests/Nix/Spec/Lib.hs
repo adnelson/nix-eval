@@ -8,9 +8,11 @@ import Test.Hspec
 import Test.QuickCheck hiding (Result)
 import Nix.Common
 import Nix.Types (NBinaryOp(..))
-import Nix.Eval
+import Nix.Eval hiding (WHNFValue, LazyValue, LEnvironment,
+                        LNative, LClosure)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
+import qualified Nix.Eval as Eval
 
 -- | Make an orphan Text instance; not sure why this isn't there already...
 instance Arbitrary Text where
@@ -73,25 +75,35 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ map pure $ enumFrom RT_Null
 
-runStrict :: WHNFValue -> IO (Either EvalError StrictValue)
+-- | The monad we're using to test things in.
+type TestM = IO
+
+type WHNFValue = Eval.WHNFValue TestM
+type LazyValue = Eval.LazyValue TestM
+type LNative = Eval.LNative TestM
+type LEnvironment = Eval.LEnvironment TestM
+type LAttrSet = Eval.LAttrSet TestM
+type LClosure = Eval.LClosure TestM
+
+runStrict :: WHNFValue -> TestM (Either EvalError StrictValue)
 runStrict = run . whnfToStrict
 
-runStrictL :: LazyValue -> IO (Either EvalError StrictValue)
+runStrictL :: LazyValue -> TestM (Either EvalError StrictValue)
 runStrictL = run . lazyToStrict
 
-evalStrict :: Expression -> IO (Either EvalError StrictValue)
+evalStrict :: Expression -> TestM (Either EvalError StrictValue)
 evalStrict expr = run $ lazyToStrict $ performEval expr
 
 evalStrictWithEnv :: LEnvironment -> Expression ->
-                    IO (Either EvalError StrictValue)
+                    TestM (Either EvalError StrictValue)
 evalStrictWithEnv env expr = run $ lazyToStrict $ evaluate env expr
 
 runNativeStrict :: LNative WHNFValue ->
-                   IO (Either EvalError StrictValue)
+                   TestM (Either EvalError StrictValue)
 runNativeStrict = run . lazyToStrict . unwrapNative
 
-runNativeStrictL :: Eval (LNative WHNFValue) ->
-                   IO (Either EvalError StrictValue)
+runNativeStrictL :: Eval TestM (LNative WHNFValue) ->
+                   TestM (Either EvalError StrictValue)
 runNativeStrictL lazy = run $ lazyToStrict . unwrapNative =<< lazy
 
 shouldEvalTo :: Expression -> StrictValue -> Expectation
@@ -133,7 +145,7 @@ failingExpression = "throw" @@ strE "failed on purpose"
 succeedingExpression :: Expression
 succeedingExpression = strE "success"
 
-shouldBeValid :: Show a => Eval a -> Expectation
+shouldBeValid :: Show a => Eval TestM a -> Expectation
 shouldBeValid action = do
   res <- run action
   shouldSatisfy res $ \case

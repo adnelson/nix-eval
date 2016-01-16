@@ -7,61 +7,61 @@ import Nix.Values.Generic
 import qualified Data.HashMap.Strict as H
 
 -- | The result of evaluation: it might be an error.
-newtype Eval a = Eval {runEval :: ExceptT EvalError IO a}
+newtype Eval m a = Eval {runEval :: ExceptT EvalError m a}
   deriving (Functor, Applicative, Monad)
 
 -- | Run an evaluator action, and return either an error or a result.
-run :: Eval a -> IO (Either EvalError a)
+run :: Eval m a -> m (Either EvalError a)
 run = runExceptT . runEval
 
-instance MonadError EvalError Eval where
+instance Monad m => MonadError EvalError (Eval m) where
   throwError = Eval . throwError
   catchError action handler = Eval $ do
     runEval action `catchError` \err -> runEval $ handler err
 
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally contains lazily evaluated values.
-type WHNFValue = Value Eval
+type WHNFValue m = Value (Eval m)
 
 -- | This is how we represent a lazily evaluated value: It's an
 -- 'Eval', which means it might be an error; but if it's not an
 -- error it will be a value in WHNF.
-type LazyValue = Eval WHNFValue
+type LazyValue m = Eval m (WHNFValue m)
 
-instance ShowIO a => ShowIO (Eval a) where
-  showIO (Eval a) = showIO a
+-- instance ShowIO a => ShowIO (Eval a) where
+--   showIO (Eval a) = showIO a
 
-instance ShowIO WHNFValue where
-  showIO (VConstant c) = return $ "VConstant (" <> tshow c <> ")"
-  showIO (VAttrSet set) = showIO set
-  showIO (VList vs) = do
-    inners <- mapM showIO vs
-    return $ concat ["[", intercalate ", " $ toList inners, "]"]
-  showIO (VFunction param closure) = do
-    closureRep <- showIO closure
-    return $ concat [ param, " => (", closureRep, ")"]
-  showIO (VNative (NativeValue v)) = showIO v
-  showIO (VNative _) = return "(native function)"
+-- instance ShowIO WHNFValue where
+--   showIO (VConstant c) = return $ "VConstant (" <> tshow c <> ")"
+--   showIO (VAttrSet set) = showIO set
+--   showIO (VList vs) = do
+--     inners <- mapM showIO vs
+--     return $ concat ["[", intercalate ", " $ toList inners, "]"]
+--   showIO (VFunction param closure) = do
+--     closureRep <- showIO closure
+--     return $ concat [ param, " => (", closureRep, ")"]
+--   showIO (VNative (NativeValue v)) = showIO v
+--   showIO (VNative _) = return "(native function)"
 
--- | We use a nix-esque syntax for showing an environment.
-instance ShowIO LEnvironment where
-  showIO (Environment env) = do
-    items <- showItems
-    return ("{" <> items <> "}")
-    where
-      showPair (n, v) = showIO v >>= \v' -> return (n <> " = " <> v')
-      showItems = intercalate "; " <$> mapM showPair (H.toList env)
+-- -- | We use a nix-esque syntax for showing an environment.
+-- instance ShowIO LEnvironment where
+--   showIO (Environment env) = do
+--     items <- showItems
+--     return ("{" <> items <> "}")
+--     where
+--       showPair (n, v) = showIO v >>= \v' -> return (n <> " = " <> v')
+--       showItems = intercalate "; " <$> mapM showPair (H.toList env)
 
-instance ShowIO LClosure where
-  showIO (Closure env body) = do
-    envRep <- showIO env
-    return $ "with " <> envRep <> "; " <> tshow body
+-- instance ShowIO LClosure where
+--   showIO (Closure env body) = do
+--     envRep <- showIO env
+--     return $ "with " <> envRep <> "; " <> tshow body
 
 -- Some type synonyms for readability. The 'L' is for lazy.
-type LNative = Native Eval
-type LEnvironment = Environment Eval
-type LAttrSet = AttrSet Eval
-type LClosure = Closure Eval
+type LNative m = Native (Eval m)
+type LEnvironment m = Environment (Eval m)
+type LAttrSet m = AttrSet (Eval m)
+type LClosure m = Closure (Eval m)
 
 -------------------------------------------------------------------------------
 --------------------------- Deep Evaluation -----------------------------------
@@ -69,7 +69,7 @@ type LClosure = Closure Eval
 
 -- | Most of the time we evaluate things lazily, but sometimes we want
 -- to be able to evaluate strictly (esp. in the `deepSeq` function).
-deeplyEval :: WHNFValue -> LazyValue
+deeplyEval :: Monad m => WHNFValue m -> LazyValue m
 deeplyEval val = case val of
   VNative (NativeValue nval) -> join $ deeplyEvalLazy nval
   VList lvals -> map VList $ mapM deeplyEvalLazy lvals
@@ -80,7 +80,7 @@ deeplyEval val = case val of
   _ -> return val
 
 -- | Deeply evaluate a lazy value, while keeping it appearing as lazy.
-deeplyEvalLazy :: LazyValue -> Eval LazyValue
+deeplyEvalLazy :: Monad m => LazyValue m -> Eval m (LazyValue m)
 deeplyEvalLazy lval = lval >>= deeplyEval >> return lval
 
 -- instance FromConstant LazyValue where
@@ -90,5 +90,7 @@ deeplyEvalLazy lval = lval >>= deeplyEval >> return lval
 
 -- | Synonym for monadic bind, applying a function inside of a
 -- 'Result', provided the 'Result' contains a 'WHNFValue'.
-unwrapAndApply :: (WHNFValue -> LazyValue) -> LazyValue -> LazyValue
+unwrapAndApply :: Monad m =>
+                  (WHNFValue m -> LazyValue m) ->
+                  LazyValue m -> LazyValue m
 unwrapAndApply func res = res >>= func
