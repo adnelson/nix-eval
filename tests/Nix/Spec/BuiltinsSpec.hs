@@ -27,7 +27,6 @@ spec = do
 bi :: Text -> Expression
 bi key = "builtins" !. key
 
-
 constantToEnvStringSpec :: Spec
 constantToEnvStringSpec = describe "constantToEnvString" $ do
   it "should translate strings" $ property $ \s ->
@@ -87,6 +86,13 @@ describeTopLevel name = case name of
     it "should be false for others" $ do
       "isNull" @@ listE [] `shouldEvalTo` convert False
       "isNull" @@ intE 1 `shouldEvalTo` convert False
+  "removeAttrs" -> wrapDescribe $ do
+    it "should remove keys" $ do
+      let aset = attrsE [("foo", 1), ("bar", 2), ("baz", 3)]
+          toRm = listE [strE "foo", strE "bar"]
+      "removeAttrs" @@ aset @@ toRm `shouldEvalTo` attrsV [("baz", intV 3)]
+    it "shouldn't complain if a key isn't present" $ do
+      "removeAttrs" @@ attrsE [] @@ listE [strE "x"] `shouldEvalTo` attrsV []
 
   name -> it "isn't written yet" $ do
     pendingWith $ "No tests yet defined for " <> show name
@@ -130,6 +136,8 @@ describeBuiltinKey name = case name of
     case j of
       0 -> bi "div" @@ intE i @@ intE j `shouldErrorWith` ["DivideByZero"]
       _ -> bi "div" @@ intE i @@ intE j `shouldEvalTo` intV (i `div` j)
+  "lessThan" -> wrapSingle $ property $ \i j -> do
+    bi "lessThan" @@ intE i @@ intE j `shouldEvalTo` convert (i < j)
   "seq" -> wrapDescribe $ do
     it "should fail if first argument is error" $ do
       property $ \expr ->
@@ -252,8 +260,11 @@ describeBuiltinKey name = case name of
     it "should favor the second dictionary" $ do
       let (set1, set2) = (attrsE [("foo", 1)], attrsE [("foo", 2)])
       bi "intersectAttrs" @@ set1 @@ set2 `shouldEvalTo` attrsV [("foo", intV 2)]
-
-
+  "hasAttr" -> wrapDescribe $ do
+    it "should work" $ do
+      property $ \key -> do
+        bi "hasAttr" @@ strE key @@ attrsE [(key, 1)] `shouldEvalTo` convert True
+        bi "hasAttr" @@ strE key @@ attrsE [] `shouldEvalTo` convert False
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do

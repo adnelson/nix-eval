@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Nix.Eval.Builtins.NativeFunctions where
 
 import Nix.Common
@@ -160,3 +161,25 @@ builtin_intersectAttrs = \case
       pure $ VAttrSet $ Environment $ H.intersection set2 set1
     v -> expectedAttrs v
   v -> \_ -> expectedAttrs v
+
+-- | First argument is the name of an attribute, and the second is a
+-- set. Returns whether that attribute is in the set.
+builtin_hasAttr :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_hasAttr attrName attrSet = case (attrName, attrSet) of
+  (VConstant (String name), VAttrSet aset) -> case lookupEnv name aset of
+    Nothing -> convert False
+    Just _ -> convert True
+  (VConstant (String _), _) -> expectedString attrName
+  _ -> expectedAttrs attrSet
+
+-- | First argument is an attribute set, second is a list of strings.
+-- Remove all keys in the list from the set.
+builtin_removeAttrs :: forall m. Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
+  (VAttrSet set, VList names) -> go set $ toList names where
+     go res [] = pure $ VAttrSet res
+     go res (lval:lvals) = lval >>= \case
+       VConstant (String name) -> go (deleteEnv name res) lvals
+       v -> expectedString v
+  (VAttrSet _, _) -> expectedList attrList
+  _ -> expectedAttrs attrSet
