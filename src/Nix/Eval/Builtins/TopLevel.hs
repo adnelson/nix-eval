@@ -60,7 +60,7 @@ builtins = mkEnvL
   , ("sort", notImplemented "sort")
   , ("stringLength", pure $ nativeV $ toNative1 builtin_stringLength)
   , ("sub", pure $ nativeV $ interpretBinop NMinus)
-  , ("substring", notImplemented "substring")
+  , ("substring", pure $ nativeV $ toNative3 builtin_substring)
   , ("tail", pure $ nativeV $ toNative1 builtin_tail)
   , ("toFile", notImplemented "toFile")
   , ("toJSON", notImplemented "toJSON")

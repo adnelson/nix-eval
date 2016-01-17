@@ -11,6 +11,10 @@ type NativeFunc1 m = LNative m (WHNFValue m -> WHNFValue m)
 -- | Aliases a function on 'WHNFValue's of arity 2.
 type NativeFunc2 m = LNative m (WHNFValue m -> WHNFValue m -> WHNFValue m)
 
+-- | Aliases a function on 'WHNFValue's of arity 3.
+type NativeFunc3 m = LNative m (WHNFValue m -> WHNFValue m ->
+                                WHNFValue m -> WHNFValue m)
+
 -- | Takes a function which takes a strictly-evaluated value and turns
 -- it into a 'Native' value. Note that we need to inspect the inner
 -- value (hence the 'map') before the function can be applied, so this
@@ -25,31 +29,22 @@ toNative1L :: Monad m => (LazyValue m -> LazyValue m) -> NativeFunc1 m
 toNative1L f = NativeFunction $ return . NativeValue . f
 
 -- | For arity-2 functions on WHNF values.
-toNative2 :: Monad m =>
-             (WHNFValue m -> WHNFValue m -> LazyValue m) ->
+toNative2 :: Monad m => (WHNFValue m -> WHNFValue m -> LazyValue m) ->
              NativeFunc2 m
-toNative2 f = NativeFunction $ \lazyVal -> do
-  val <- lazyVal
-  return $ toNative1 $ f val
+toNative2 f = NativeFunction $ (=<<) (return . toNative1 . f)
 
 -- | For arity-2 functions whose /second/ argument can be lazily evaluated.
-toNative2L :: Monad m =>
-              (WHNFValue m -> LazyValue m -> LazyValue m) ->
+toNative2L :: Monad m => (WHNFValue m -> LazyValue m -> LazyValue m) ->
               NativeFunc2 m
 toNative2L f = NativeFunction $ (=<<) (return . toNative1L . f)
 
 -- | For arity-2 functions whose /first/ argument can be lazily evaluated.
-toNative2L' :: Monad m =>
-               (LazyValue m -> WHNFValue m -> LazyValue m) ->
+toNative2L' :: Monad m => (LazyValue m -> WHNFValue m -> LazyValue m) ->
                NativeFunc2 m
 toNative2L' f = NativeFunction $ return . toNative1 . f
 
--- WIP
--- intFunc :: Monad m => (Integer -> LazyValue m) -> WHNFValue m -> LazyValue m
--- intFunc func (VConstant (Int i)) = func i
--- intFunc _ v = expectedInt v
-
--- intFunc2 :: Monad m =>
---             (Integer -> Integer -> LazyValue m) ->
---             WHNFValue m -> WHNFValue m -> LazyValue m
--- intFunc2 func (VConstant (Int i)) = intFunc (func i)
+-- | For arity-3 functions on WHNF values.
+toNative3 :: Monad m =>
+             (WHNFValue m -> WHNFValue m -> WHNFValue m -> LazyValue m) ->
+             NativeFunc3 m
+toNative3 f = NativeFunction $ (=<<) (return . toNative2 . f)

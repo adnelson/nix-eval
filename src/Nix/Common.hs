@@ -13,7 +13,7 @@ module Nix.Common (
   module Control.Monad.Identity,
   module Control.Monad.Except,
   Extract(..), ShowIO(..), Record,
-  pathToText, mapToRecord
+  pathToText, mapToRecord, substring
   ) where
 
 import           ClassyPrelude              hiding (FilePath, asList, assert,
@@ -75,3 +75,8 @@ type Record = HashMap Text
 
 mapToRecord :: Map Text t -> Record t
 mapToRecord = H.fromList . M.toList
+
+substring :: Integral i => i -> i -> Text -> Text
+substring s l str = do
+  let (start, len) = (fromIntegral s, fromIntegral l)
+  T.take len $ T.drop start str

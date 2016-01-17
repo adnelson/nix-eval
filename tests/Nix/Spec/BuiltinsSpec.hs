@@ -11,6 +11,7 @@ import Nix.Eval.Builtins
 import Nix.Spec.Lib
 import Nix.Spec.ExpectedBuiltins
 import qualified Data.Set as S
+import qualified Data.Text as T
 
 main :: IO ()
 main = hspec spec
@@ -265,6 +266,10 @@ describeBuiltinKey name = case name of
       property $ \key -> do
         bi "hasAttr" @@ strE key @@ attrsE [(key, 1)] `shouldEvalTo` convert True
         bi "hasAttr" @@ strE key @@ attrsE [] `shouldEvalTo` convert False
+  "substring" -> wrapDescribe $ do
+    it "should take a substring" $ property $ \start len str -> do
+      bi "substring" @@ intE start @@ intE len @@ strE str
+        `shouldEvalTo` convert (substring start len str)
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do
