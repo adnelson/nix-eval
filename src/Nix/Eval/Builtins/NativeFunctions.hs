@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Nix.Eval.Builtins.NativeFunctions where
 
 import Nix.Common
@@ -171,12 +172,14 @@ builtin_hasAttr attrName attrSet = case (attrName, attrSet) of
   (VConstant (String _), _) -> expectedString attrName
   _ -> expectedAttrs attrSet
 
--- builtin_removeAttrs :: WHNFValue IO -> WHNFValue IO -> LazyValue IO
--- builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
---   (VAttrSet set, VList names) -> undefined where -- foldM rm _set names where
---     rm :: Environment IO -> LazyValue IO -> LazyValue IO
---     rm result lazyVal = lazyVal >>= \case
---       VConstant (String name) -> (pure $ VAttrSet (deleteEnv name result) :: LazyValue IO)
---       v -> expectedString v
---   (VAttrSet _, _) -> expectedList attrList
---   _ -> expectedAttrs attrSet
+-- | First argument is an attribute set, second is a list of strings.
+-- Remove all keys in the list from the set.
+builtin_removeAttrs :: forall m. Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
+  (VAttrSet set, VList names) -> go set $ toList names where
+     go res [] = pure $ VAttrSet res
+     go res (lval:lvals) = lval >>= \case
+       VConstant (String name) -> go (deleteEnv name res) lvals
+       v -> expectedString v
+  (VAttrSet _, _) -> expectedList attrList
+  _ -> expectedAttrs attrSet
