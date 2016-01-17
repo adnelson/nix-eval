@@ -160,3 +160,23 @@ builtin_intersectAttrs = \case
       pure $ VAttrSet $ Environment $ H.intersection set2 set1
     v -> expectedAttrs v
   v -> \_ -> expectedAttrs v
+
+-- | First argument is the name of an attribute, and the second is a
+-- set. Returns whether that attribute is in the set.
+builtin_hasAttr :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_hasAttr attrName attrSet = case (attrName, attrSet) of
+  (VConstant (String name), VAttrSet aset) -> case lookupEnv name aset of
+    Nothing -> convert False
+    Just _ -> convert True
+  (VConstant (String _), _) -> expectedString attrName
+  _ -> expectedAttrs attrSet
+
+-- builtin_removeAttrs :: WHNFValue IO -> WHNFValue IO -> LazyValue IO
+-- builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
+--   (VAttrSet set, VList names) -> undefined where -- foldM rm _set names where
+--     rm :: Environment IO -> LazyValue IO -> LazyValue IO
+--     rm result lazyVal = lazyVal >>= \case
+--       VConstant (String name) -> (pure $ VAttrSet (deleteEnv name result) :: LazyValue IO)
+--       v -> expectedString v
+--   (VAttrSet _, _) -> expectedList attrList
+--   _ -> expectedAttrs attrSet

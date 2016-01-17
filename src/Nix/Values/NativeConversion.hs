@@ -1,6 +1,7 @@
 module Nix.Values.NativeConversion where
 
 import Nix.Common
+import Nix.Constants
 import Nix.Values.Generic
 import Nix.Values.Lazy
 
@@ -42,3 +43,13 @@ toNative2L' :: Monad m =>
                (LazyValue m -> WHNFValue m -> LazyValue m) ->
                NativeFunc2 m
 toNative2L' f = NativeFunction $ return . toNative1 . f
+
+-- WIP
+-- intFunc :: Monad m => (Integer -> LazyValue m) -> WHNFValue m -> LazyValue m
+-- intFunc func (VConstant (Int i)) = func i
+-- intFunc _ v = expectedInt v
+
+-- intFunc2 :: Monad m =>
+--             (Integer -> Integer -> LazyValue m) ->
+--             WHNFValue m -> WHNFValue m -> LazyValue m
+-- intFunc2 func (VConstant (Int i)) = intFunc (func i)

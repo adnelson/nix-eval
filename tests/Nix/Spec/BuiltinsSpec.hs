@@ -27,7 +27,6 @@ spec = do
 bi :: Text -> Expression
 bi key = "builtins" !. key
 
-
 constantToEnvStringSpec :: Spec
 constantToEnvStringSpec = describe "constantToEnvString" $ do
   it "should translate strings" $ property $ \s ->
@@ -252,7 +251,11 @@ describeBuiltinKey name = case name of
     it "should favor the second dictionary" $ do
       let (set1, set2) = (attrsE [("foo", 1)], attrsE [("foo", 2)])
       bi "intersectAttrs" @@ set1 @@ set2 `shouldEvalTo` attrsV [("foo", intV 2)]
-
+  "hasAttr" -> wrapDescribe $ do
+    it "should work" $ do
+      property $ \key -> do
+        bi "hasAttr" @@ strE key @@ attrsE [(key, 1)] `shouldEvalTo` convert True
+        bi "hasAttr" @@ strE key @@ attrsE [] `shouldEvalTo` convert False
 
 
 -- For others, we just say the test is pending.

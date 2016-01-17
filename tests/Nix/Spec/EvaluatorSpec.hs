@@ -18,7 +18,7 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = do --describe "something" $ it "something" $ True `shouldBe` True
+spec = do
   testBalloonSpec
   functionsSpec
   lazyEvalSpec

@@ -183,6 +183,9 @@ insertEnv name v (Environment env) = Environment $
 insertEnvL :: Text -> m (Value m) -> Environment m -> Environment m
 insertEnvL name v (Environment env) = Environment $ H.insert name v env
 
+deleteEnv :: Text -> Environment m -> Environment m
+deleteEnv key (Environment env) = Environment $ H.delete key env
+
 -- | Convert an environment to a list of (name, v).
 envToList :: Environment m -> [(Text, m (Value m))]
 envToList (Environment env) = H.toList env
