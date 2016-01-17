@@ -8,8 +8,10 @@ import Nix.Expressions
 import Nix.Eval.Evaluator (evalApply)
 import Nix.Values
 import Nix.Values.NativeConversion
+import Nix.Eval.Builtins.Operators (binop_eq)
 
 import qualified Data.Set as S
+import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 
 -- | Conversion to environment variables for constants.
@@ -183,3 +185,26 @@ builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
        v -> expectedString v
   (VAttrSet _, _) -> expectedList attrList
   _ -> expectedAttrs attrSet
+
+-- | `start` and `len` are ints, `str` is a string.
+-- Take `len` characters from `str` starting at character `start`.
+builtin_substring :: forall m. Monad m =>
+                     WHNFValue m -> WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_substring start len str = case (start, len, str) of
+  (VConstant (Int start), VConstant (Int len), VConstant (String str)) -> do
+    pure $ strV $ substring start len str
+  (VConstant (Int _), VConstant (Int _), v) -> expectedString v
+  (VConstant (Int _), v, _) -> expectedInt v
+  (v, _, _) -> expectedInt v
+
+-- | See if the first argument is a member of the second (a list).
+builtin_elem :: forall m. Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_elem item = \case
+  VList list -> go $ toList list where
+    go [] = convert False
+    go (lval:lvals) = do
+      val <- lval :: LazyValue m
+      binop_eq item val >>= \case
+        VConstant (Bool True) -> convert True
+        _ -> go lvals
+  v -> expectedList v
