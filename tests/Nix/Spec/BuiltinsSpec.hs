@@ -270,6 +270,18 @@ describeBuiltinKey name = case name of
     it "should take a substring" $ property $ \start len str -> do
       bi "substring" @@ intE start @@ intE len @@ strE str
         `shouldEvalTo` convert (substring start len str)
+  "elem" -> wrapDescribe $ do
+    it "should find it if it's there" $ do
+      -- TODO: randomize the list?
+      property $ \const1 const2 const3 -> do
+        let list = fromConstants [const1, const2, const3]
+        bi "elem" @@ fromConstant const1 @@ list `shouldEvalTo` convert True
+        bi "elem" @@ fromConstant const2 @@ list `shouldEvalTo` convert True
+        bi "elem" @@ fromConstant const3 @@ list `shouldEvalTo` convert True
+    it "shouldn't find it if it isn't there" $ do
+      property $ \constant -> do
+        let list = listE []
+        bi "elem" @@ fromConstant constant @@ list `shouldEvalTo` convert False
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do

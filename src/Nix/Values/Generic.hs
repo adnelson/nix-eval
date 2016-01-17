@@ -125,6 +125,10 @@ functionV params closure = VFunction params closure
 nativeV :: Monad m => Native m v -> Value m
 nativeV = VNative
 
+-- | Wrap a native into a monadic value.
+pNativeV :: Monad m => Native m v -> m (Value m)
+pNativeV = pure . nativeV
+
 -------------------------------------------------------------------------------
 -- Environments and Attribute Sets --------------------------------------------
 -------------------------------------------------------------------------------
