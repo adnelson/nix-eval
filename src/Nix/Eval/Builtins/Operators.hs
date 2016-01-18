@@ -4,6 +4,8 @@ import Nix.Common
 import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Constants
 import Nix.Expressions
+import Nix.Eval.Errors
+import Nix.Eval.RuntimeTypes
 import Nix.Values
 import Nix.Values.NativeConversion
 

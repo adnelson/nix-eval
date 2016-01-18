@@ -4,10 +4,10 @@ import Test.Hspec
 import Test.QuickCheck
 import Nix.Common
 import Nix.Expressions
+import Nix.Eval
 import Nix.Constants
 import Nix.Values
 import Nix.Values.NativeConversion
-import Nix.Eval.Builtins
 import Nix.Spec.Lib
 import Nix.Spec.ExpectedBuiltins
 import qualified Data.Set as S

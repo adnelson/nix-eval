@@ -4,6 +4,7 @@
 module Nix.Spec.Lib where
 
 import Data.Either
+import Control.Monad.State.Strict
 import Test.Hspec
 import Test.QuickCheck hiding (Result)
 import Nix.Types (Formals(..))
@@ -76,8 +77,19 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ pure <$> enumFrom RT_Null
 
+-- | We can use this to mock out things like filesystem interaction
+-- and message writing.
+data MockIO = MockIO {
+    mioWriteBuffer :: Seq Text
+  } deriving (Show, Eq)
+
 -- | The monad we're using to test things in.
-type TestM = IO
+type TestM = State MockIO
+
+instance WriteMessage TestM where
+  writeMessage msg = modify $ \s -> s {
+    mioWriteBuffer = mioWriteBuffer s `snoc` msg
+    }
 
 type WHNFValue = Eval.WHNFValue TestM
 type LazyValue = Eval.LazyValue TestM

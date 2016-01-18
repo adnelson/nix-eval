@@ -44,10 +44,14 @@ library
                      , FlexibleInstances
                      , TypeSynonymInstances
                      , RankNTypes
+                     , InstanceSigs
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports
 
 Test-Suite spec
   Type:                exitcode-stdio-1.0
+  other-modules:       Nix.Eval.Evaluator
+                     , Nix.Values
+                     , Nix.Expressions
   Default-Language:    Haskell2010
   Hs-Source-Dirs:      src
                      , tests
@@ -77,6 +81,7 @@ Test-Suite spec
                      , FlexibleInstances
                      , TypeSynonymInstances
                      , RankNTypes
+                     , InstanceSigs
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports -fno-warn-type-defaults
 
 Source-Repository head

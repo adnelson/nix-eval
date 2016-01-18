@@ -2,7 +2,7 @@ module Nix.Spec.OperatorsSpec (main, spec) where
 
 import Nix.Common
 import Nix.Constants
-import Nix.Eval.Builtins.Operators
+import Nix.Eval
 import Nix.Expressions
 import Nix.Spec.Lib
 import Nix.Values
