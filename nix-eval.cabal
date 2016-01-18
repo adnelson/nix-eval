@@ -45,6 +45,7 @@ library
                      , TypeSynonymInstances
                      , RankNTypes
                      , InstanceSigs
+                     , KindSignatures
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports
 
 Test-Suite spec
@@ -82,6 +83,7 @@ Test-Suite spec
                      , TypeSynonymInstances
                      , RankNTypes
                      , InstanceSigs
+                     , KindSignatures
   ghc-options:       -fno-warn-name-shadowing -fno-warn-unused-imports -fno-warn-type-defaults
 
 Source-Repository head

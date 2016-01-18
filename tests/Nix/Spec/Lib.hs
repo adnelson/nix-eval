@@ -84,7 +84,7 @@ data MockIO = MockIO {
   } deriving (Show, Eq)
 
 -- | The monad we're using to test things in.
-type TestM = State MockIO
+type TestM = StateT MockIO IO
 
 instance WriteMessage TestM where
   writeMessage msg = modify $ \s -> s {
