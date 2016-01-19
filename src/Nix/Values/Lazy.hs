@@ -1,7 +1,11 @@
+-- | Describes lazily-evaluated values, for which the context is one
+-- in which both errors and filesystem interaction are possible.
 module Nix.Values.Lazy where
 
 import Nix.Common
 import Nix.Expressions
+import Nix.Eval.Errors
+import Nix.Eval.RuntimeTypes
 import Nix.Constants
 import Nix.Values.Generic
 import qualified Data.HashMap.Strict as H
@@ -18,6 +22,11 @@ instance Monad m => MonadError EvalError (Eval m) where
   throwError = Eval . throwError
   catchError action handler = Eval $ do
     runEval action `catchError` \err -> runEval $ handler err
+
+instance WriteMessage m => WriteMessage (Eval m) where
+  writeMessage :: Text -> Eval m ()
+  writeMessage msg = do
+    Eval $ ExceptT $ map Right $ writeMessage msg
 
 -- | Weak-head-normal-form values are strict at the top-level, but
 -- internally contains lazily evaluated values.

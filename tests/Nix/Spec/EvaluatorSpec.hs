@@ -8,8 +8,7 @@ import Nix.Constants
 import Nix.Values hiding (WHNFValue, LazyValue)
 import Nix.Expressions
 import Nix.Spec.Lib as Lib
-import Nix.Eval.Builtins.NativeFunctions (builtin_throw, builtin_seq)
-import Nix.Eval.Builtins.Operators (binop_div)
+import Nix.Eval (builtin_throw, builtin_seq, binop_div, EvalError(..))
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -65,7 +64,7 @@ functionsSpec = describe "functions" $ do
         func @@ attrsE [("foo", 1)]
           `shouldErrorWith` ["MissingArguments", "bar"]
       it "should report all missing arguments" $ do
-        Left (MissingArguments args) <- evalStrict (func @@ attrsE [])
+        Left (MissingArguments args) <- evalStrict1 (func @@ attrsE [])
         S.fromList args `shouldBe` S.fromList ["foo", "bar"]
       it "should allow assigning the argument to a variable" $ do
         let func = ELambda (FormalSet params (Just "args")) ("args" !. "foo")
@@ -148,17 +147,17 @@ lazyEvalSpec = describe "lazy evaluation" $ do
         -- Even though we're passing an error argument to this
         -- function, it should still return 1 since it's lazy.
         let constFunc = toNative1L $ \(_::LazyValue) -> pure (intV 1)
-        res <- runNativeStrictL $ applyNative constFunc (throwError err)
+        res <- runNativeStrictL1 $ applyNative constFunc (throwError err)
         res `shouldBe` Right (intV 1)
       it "shouldn't evaluate unless needed (arity 2)" $ do
         let constFunc2 = toNative2L $ \(v::WHNFValue) (_::LazyValue) -> pure v
-        res <- runNativeStrictL $
+        res <- runNativeStrictL1 $
                  applyNative2 constFunc2 (pure nullV) (throwError err)
         res `shouldBe` pure nullV
     describe "when using strict values" $ do
       it "SHOULD evaluate even if not needed when using WHNFValue" $ do
         let constFunc = toNative1 $ \(_::WHNFValue) -> pure (intV 1)
-        res <- runNativeStrictL $ applyNative constFunc (throwError err)
+        res <- runNativeStrictL1 $ applyNative constFunc (throwError err)
         res `shouldBe` Left err
 
 attrSetSpec :: Spec

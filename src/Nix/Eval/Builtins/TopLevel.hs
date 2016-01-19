@@ -6,6 +6,7 @@ import Nix.Expressions
 import Nix.Values.Generic
 import Nix.Values.Lazy
 import Nix.Values.NativeConversion
+import Nix.Eval.Errors (EvalError(NotImplemented))
 import Nix.Eval.Builtins.Operators
 import Nix.Eval.Builtins.NativeFunctions
 import Nix.Eval.Evaluator (evaluate)
@@ -16,7 +17,7 @@ notImplemented :: Monad m => Text -> LazyValue m
 notImplemented = throwError . NotImplemented
 
 -- | The `builtins` object.
-builtins :: Monad m => LAttrSet m
+builtins :: WriteMessage m => LAttrSet m
 builtins = mkEnvL
   [ ("add", pNativeV $ interpretBinop NPlus)
   , ("all", notImplemented "all")
@@ -66,12 +67,12 @@ builtins = mkEnvL
   , ("toJSON", notImplemented "toJSON")
   , ("toPath", notImplemented "toPath")
   , ("toXML", notImplemented "toXML")
-  , ("trace", notImplemented "trace")
+  , ("trace", pNativeV $ toNative2L builtin_trace)
   , ("typeOf", pNativeV $ toNative1 builtin_typeOf)
   ]
 
 -- | The set of objects which should appear at top-level.
-topLevelBuiltins :: Monad m => LAttrSet m
+topLevelBuiltins :: WriteMessage m => LAttrSet m
 topLevelBuiltins = mkEnvL
   [ ("abort", notImplemented "abort")
   , ("baseNameOf", notImplemented "baseNameOf")

@@ -6,6 +6,8 @@ import Nix.Types (NBinaryOp(..), NUnaryOp(..))
 import Nix.Constants
 import Nix.Expressions
 import Nix.Eval.Evaluator (evalApply)
+import Nix.Eval.Errors
+import Nix.Eval.RuntimeTypes
 import Nix.Values
 import Nix.Values.NativeConversion
 import Nix.Eval.Builtins.Operators (binop_eq)
@@ -208,3 +210,12 @@ builtin_elem item = \case
         VConstant (Bool True) -> convert True
         _ -> go lvals
   v -> expectedList v
+
+-- | Output the first argument as a string, and return the second
+-- argument.
+builtin_trace :: forall m. WriteMessage m =>
+                 WHNFValue m -> LazyValue m -> LazyValue m
+builtin_trace val lval = do
+  message <- valueToEnvString val
+  writeMessage message
+  lval

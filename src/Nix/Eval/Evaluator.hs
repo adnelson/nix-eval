@@ -5,6 +5,7 @@ import Nix.Common                       hiding (trace)
 import Nix.Constants
 import Nix.Expressions
 import Nix.Eval.Builtins.Operators (interpretBinop, interpretUnop)
+import Nix.Eval.Errors
 import Nix.Types (Formals(..), FormalParamSet(..))
 import Nix.Values
 import Nix.Values.NativeConversion

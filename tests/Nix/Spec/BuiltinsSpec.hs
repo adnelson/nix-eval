@@ -4,10 +4,10 @@ import Test.Hspec
 import Test.QuickCheck
 import Nix.Common
 import Nix.Expressions
+import Nix.Eval
 import Nix.Constants
 import Nix.Values
 import Nix.Values.NativeConversion
-import Nix.Eval.Builtins
 import Nix.Spec.Lib
 import Nix.Spec.ExpectedBuiltins
 import qualified Data.Set as S
@@ -56,15 +56,15 @@ mkTypeTestSpec = describe "mkTypeTest function" $ do
   it "should test types of constants correctly" $ do
     property $ \constant -> do
       let test = mkTypeTest (typeOfConstant constant)
-      res <- runStrictL $ test (fromConstant constant)
+      res <- runStrictL1 $ test (fromConstant constant)
       res `shouldBe` Right (convert True)
   it "should test lists correctly" $ do
     property $ \constantList -> do
-      res <- runStrictL $ mkTypeTest RT_List $ fromConstants constantList
+      res <- runStrictL1 $ mkTypeTest RT_List $ fromConstants constantList
       res `shouldBe` Right (convert True)
   it "should test sets correctly" $ do
     property $ \constantSet -> do
-      res <- runStrictL $ mkTypeTest RT_Set $ fromConstantSet constantSet
+      res <- runStrictL1 $ mkTypeTest RT_Set $ fromConstantSet constantSet
       res `shouldBe` Right (convert True)
 
 deepSeqSpec :: Spec
@@ -146,27 +146,27 @@ describeBuiltinKey name = case name of
     it "should return second argument if first argument succeeds" $ do
       property $ \constant -> do
         let expr = fromConstant constant
-        res <- evalStrict expr
-        seqRes <- evalStrict (bi "seq" @@ succeedingExpression @@ expr)
+        res <- evalStrict1 expr
+        seqRes <- evalStrict1 (bi "seq" @@ succeedingExpression @@ expr)
         res `shouldBe` seqRes
   "deepSeq" -> deepSeqSpec
   "head" -> wrapDescribe $ do
     it "should get the head of a non-empty list" $ do
       let list = listE [fromInt 1]
-      res <- evalStrict $ bi "head" @@ list
+      res <- evalStrict1 $ bi "head" @@ list
       res `shouldBe` Right (convert (1 :: Integer))
     it "should error on an empty list" $ do
       bi "head" @@ (listE []) `shouldErrorWith` ["EmptyList"]
   "tail" -> wrapDescribe $ do
     it "should get the tail of a non-empty list" $ do
       let list = listE [fromInt 1, fromInt 2]
-      res <- evalStrict $ bi "tail" @@ list
+      res <- evalStrict1 $ bi "tail" @@ list
       res `shouldBe` Right (fromConstants [Int 2])
     it "should error on an empty list" $ do
       bi "tail" @@ (listE []) `shouldErrorWith` ["EmptyList"]
   "elemAt" -> wrapDescribe $ do
     it "should index correctly" $ do
-      elem <- evalStrict $ bi "elemAt" @@ listE [intE 1, intE 2] @@ fromInt 1
+      elem <- evalStrict1 $ bi "elemAt" @@ listE [intE 1, intE 2] @@ fromInt 1
       elem `shouldBe` Right (convert (2 :: Integer))
     it "should error on an empty list" $ do
       property $ \(i::Int) -> do
@@ -233,34 +233,37 @@ describeBuiltinKey name = case name of
         let aset = attrsE $ zip uniqueKeys (repeat nullE)
         -- This test is not quite as clean as it should be, due to the
         -- problem of equality testing requiring ordering.
-        Right (VList names) <- evalStrict $ bi "attrNames" @@ aset
+        Right (VList names) <- evalStrict1 $ bi "attrNames" @@ aset
         sort names `shouldBe` map (pure . strV) (fromList $ sort uniqueKeys)
   "attrValues" -> wrapDescribe $ do
     it "should get the values of the set" $ do
       property $ \constants -> do
         let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
         -- Similarly kind of gross due to order-based equality.
-        Right (VList values) <- evalStrict $ bi "attrValues" @@ aset
+        Right (VList values) <- evalStrict1 $ bi "attrValues" @@ aset
         let eval'dConstants = map (\(Identity (VConstant c)) -> c) values
         sort eval'dConstants `shouldBe` fromList (sort constants)
   "intersectAttrs" -> wrapDescribe $ do
     it "a set intersected with itself should equal itself" $ do
       property $ \constants -> do
         let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
-        asetEval'd <- evalStrict aset
-        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ aset @@ aset
+        asetEval'd <- evalStrict1 aset
+        intersectedEval'd <- evalStrict1 $ bi "intersectAttrs" @@ aset @@ aset
         asetEval'd `shouldBe` intersectedEval'd
     it "a set intersected with empty should be empty" $ do
       property $ \constants -> do
         let aset = attrsE $ zip (map tshow [1..]) (map fromConstant constants)
-        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ aset @@ attrsE []
+        intersectedEval'd <- evalStrict1 $
+           bi "intersectAttrs" @@ aset @@ attrsE []
         intersectedEval'd `shouldBe` pure (attrsV [])
         -- Reverse the order.
-        intersectedEval'd <- evalStrict $ bi "intersectAttrs" @@ attrsE [] @@ aset
+        intersectedEval'd <- evalStrict1 $
+           bi "intersectAttrs" @@ attrsE [] @@ aset
         intersectedEval'd `shouldBe` pure (attrsV [])
     it "should favor the second dictionary" $ do
       let (set1, set2) = (attrsE [("foo", 1)], attrsE [("foo", 2)])
-      bi "intersectAttrs" @@ set1 @@ set2 `shouldEvalTo` attrsV [("foo", intV 2)]
+      bi "intersectAttrs" @@ set1 @@ set2
+        `shouldEvalTo` attrsV [("foo", intV 2)]
   "hasAttr" -> wrapDescribe $ do
     it "should work" $ do
       property $ \key -> do
@@ -282,6 +285,20 @@ describeBuiltinKey name = case name of
       property $ \constant -> do
         let list = listE []
         bi "elem" @@ fromConstant constant @@ list `shouldEvalTo` convert False
+  "trace" -> wrapDescribe $ do
+    it "should write a message" $ do
+      let expr = bi "trace" @@ strE "hello!" @@ 1
+      (result, state) <- evalStrict expr
+      result `shouldBe` pure (intV 1)
+      msWriteBuffer state `shouldBe` fromList ["hello!"]
+    it "shouldn't write a message if the expression doesn't get evaluated" $ do
+      let traced = bi "trace" @@ strE "hello!" @@ 1
+          -- Here we're never using the second argument, so the
+          -- expression shouldn't ever get evaluated.
+          expr = ("x" --> ("_" --> "x")) @@ 3 @@ traced
+      (result, state) <- evalStrict expr
+      result `shouldBe` pure (intV 3)
+      msWriteBuffer state `shouldBe` fromList []
 
 -- For others, we just say the test is pending.
   name -> it "isn't written yet" $ do
