@@ -79,16 +79,16 @@ instance Arbitrary RuntimeType where
 
 -- | We can use this to mock out things like filesystem interaction
 -- and message writing.
-data MockIO = MockIO {
-    mioWriteBuffer :: Seq Text
+data MockState = MockState {
+    msWriteBuffer :: Seq Text
   } deriving (Show, Eq)
 
 -- | The monad we're using to test things in.
-type TestM = StateT MockIO IO
+type TestM = StateT MockState IO
 
 instance WriteMessage TestM where
   writeMessage msg = modify $ \s -> s {
-    mioWriteBuffer = mioWriteBuffer s `snoc` msg
+    msWriteBuffer = msWriteBuffer s `snoc` msg
     }
 
 type WHNFValue = Eval.WHNFValue TestM
@@ -98,54 +98,93 @@ type LEnvironment = Eval.LEnvironment TestM
 type LAttrSet = Eval.LAttrSet TestM
 type LClosure = Eval.LClosure TestM
 
-runStrict :: WHNFValue -> TestM (Either EvalError StrictValue)
-runStrict = run . whnfToStrict
+defaultMock :: MockState
+defaultMock = MockState {
+  msWriteBuffer = mempty
+  }
 
-runStrictL :: LazyValue -> TestM (Either EvalError StrictValue)
-runStrictL = run . lazyToStrict
+runMock = flip runStateT defaultMock . run
+evalMock = map fst . runMock
 
-evalStrict :: Expression -> TestM (Either EvalError StrictValue)
-evalStrict expr = run $ lazyToStrict $ performEval expr
+runStrict :: WHNFValue -> IO (Either EvalError StrictValue, MockState)
+runStrict = runMock . whnfToStrict
+
+runStrict1 :: WHNFValue -> IO (Either EvalError StrictValue)
+runStrict1 = map fst . runStrict
+
+runStrict2 :: WHNFValue -> IO MockState
+runStrict2 = map snd . runStrict
+
+runStrictL :: LazyValue -> IO (Either EvalError StrictValue, MockState)
+runStrictL = runMock . lazyToStrict
+
+runStrictL1 :: LazyValue -> IO (Either EvalError StrictValue)
+runStrictL1 = map fst . runStrictL
+
+runStrictL2 :: LazyValue -> IO MockState
+runStrictL2 = map snd . runStrictL
+
+evalStrict :: Expression -> IO (Either EvalError StrictValue, MockState)
+evalStrict = runMock . lazyToStrict . performEval
+
+evalStrict1 :: Expression -> IO (Either EvalError StrictValue)
+evalStrict1 = map fst . evalStrict
+
+evalStrict2 :: Expression -> IO MockState
+evalStrict2 = map snd . evalStrict
 
 evalStrictWithEnv :: LEnvironment -> Expression ->
-                    TestM (Either EvalError StrictValue)
-evalStrictWithEnv env expr = run $ lazyToStrict $ evaluate env expr
+                    IO (Either EvalError StrictValue, MockState)
+evalStrictWithEnv env expr = runMock $ lazyToStrict $ evaluate env expr
 
 runNativeStrict :: LNative WHNFValue ->
-                   TestM (Either EvalError StrictValue)
-runNativeStrict = run . lazyToStrict . unwrapNative
+                   IO (Either EvalError StrictValue, MockState)
+runNativeStrict lnative = runMock $ lazyToStrict $ unwrapNative lnative
+
+runNativeStrict1 :: LNative WHNFValue -> IO (Either EvalError StrictValue)
+runNativeStrict1 = map fst . runNativeStrict
+
+runNativeStrict2 :: LNative WHNFValue -> IO MockState
+runNativeStrict2 = map snd . runNativeStrict
 
 runNativeStrictL :: Eval TestM (LNative WHNFValue) ->
-                   TestM (Either EvalError StrictValue)
-runNativeStrictL lazy = run $ lazyToStrict . unwrapNative =<< lazy
+                   IO (Either EvalError StrictValue, MockState)
+runNativeStrictL lazy = runMock $ lazyToStrict . unwrapNative =<< lazy
+
+runNativeStrictL1 :: Eval TestM (LNative WHNFValue) ->
+                     IO (Either EvalError StrictValue)
+runNativeStrictL1 = map fst . runNativeStrictL
+
+runNativeStrictL2 :: Eval TestM (LNative WHNFValue) -> IO MockState
+runNativeStrictL2 = map snd . runNativeStrictL
 
 shouldEvalTo :: Expression -> StrictValue -> Expectation
 shouldEvalTo expr val = do
-  result <- run $ lazyToStrict $ performEval expr
+  result <- evalMock $ lazyToStrict $ performEval expr
   result `shouldBe` pure val
 
 shouldEvalToWithEnv :: LEnvironment -> Expression -> StrictValue -> Expectation
 shouldEvalToWithEnv env expr val = do
-  result <- run $ lazyToStrict $ evaluate env expr
+  result <- evalMock $ lazyToStrict $ evaluate env expr
   result `shouldBe` pure val
 
 shouldBeError :: LazyValue -> Expectation
 shouldBeError action = do
-  res <- run $ lazyToStrict action
+  res <- evalMock $ lazyToStrict action
   shouldSatisfy res $ \case
     Left _ -> True
     _ -> False
 
 shouldBeNameError :: LazyValue -> Expectation
 shouldBeNameError action = do
-  res <- run $ lazyToStrict action
+  res <- evalMock $ lazyToStrict action
   shouldSatisfy res $ \case
     Left (NameError _ _) -> True
     _ -> False
 
 shouldBeErrorWith :: LazyValue -> [String] -> Expectation
 shouldBeErrorWith action strings = do
-  res <- run $ lazyToStrict action
+  res <- evalMock $ lazyToStrict action
   shouldSatisfy res $ \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
@@ -160,14 +199,14 @@ succeedingExpression = strE "success"
 
 shouldBeValid :: Show a => Eval TestM a -> Expectation
 shouldBeValid action = do
-  res <- run action
+  res <- evalMock action
   shouldSatisfy res $ \case
     Left _ -> False
     _ -> True
 
 shouldErrorWithEnv :: LEnvironment -> Expression -> [String] -> Expectation
 shouldErrorWithEnv env expr strings = do
-  res <- run $ lazyToStrict $ evaluate env expr
+  res <- evalMock $ lazyToStrict $ evaluate env expr
   res `shouldSatisfy` \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False

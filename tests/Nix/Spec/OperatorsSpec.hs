@@ -24,10 +24,10 @@ divisionSpec = describe "division" $ do
   let div_ = toNative2 binop_div
   let mkInt = pure . intV
   it "should divide numbers" $ do
-    res <- runNativeStrictL $ applyNative2 div_ (mkInt 6) (mkInt 3)
+    res <- runNativeStrictL1 $ applyNative2 div_ (mkInt 6) (mkInt 3)
     res `shouldBe` Right (intV 2)
   it "should not divide by zero" $ property $ \i -> do
-    res <- runNativeStrictL $ applyNative2 div_ (mkInt i) (mkInt 0)
+    res <- runNativeStrictL1 $ applyNative2 div_ (mkInt i) (mkInt 0)
     res `shouldBe` Left DivideByZero
 
 binopsSpec :: Spec
