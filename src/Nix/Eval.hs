@@ -20,5 +20,5 @@ import Nix.Eval.Errors
 import Nix.Eval.RuntimeTypes
 
 -- | Evaluate an expression with the builtins in scope.
-performEval :: WriteMessage m => Expression -> LazyValue m
+performEval :: Nix m => Expression -> LazyValue m
 performEval = evaluate topLevelBuiltins
