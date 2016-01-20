@@ -7,6 +7,7 @@ module Nix.Values.Generic where
 import Nix.Common
 import Nix.Expressions
 import Nix.Constants
+import Nix.Types (NExpr, Formals)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq
@@ -28,6 +29,7 @@ data Value m
   -- ^ List values.
   | VFunction Params (Closure m)
   -- ^ Functions, with parameters and a closure.
+  | VFunction' (Formals NExpr) (Closure' m)
   | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
 
@@ -155,6 +157,9 @@ type AttrSet = Environment
 data Closure m = Closure (Environment m) Expression
   deriving (Eq, Generic)
 
+data Closure' m = Closure' (Environment m) NExpr
+  deriving (Eq, Generic)
+
 -- | TODO: make a proper ord instance...
 instance Extract m => Ord (Closure m) where
   Closure env _ <= Closure env' _ = env <= env'
@@ -207,7 +212,7 @@ emptyE :: Environment m
 emptyE = Environment mempty
 
 -- | An empty closure.
-emptyC :: Expression -> Closure v
+emptyC :: Expression -> Closure m
 emptyC = Closure emptyE
 
 -------------------------------------------------------------------------------
