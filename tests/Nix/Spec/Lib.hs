@@ -7,9 +7,9 @@ import Data.Either
 import Control.Monad.State.Strict
 import Test.Hspec
 import Test.QuickCheck hiding (Result)
-import Nix.Types (Formals(..))
+import Nix.Expr (Formals(..))
 import Nix.Common
-import Nix.Types (NBinaryOp(..))
+import Nix.Expr (NBinaryOp(..))
 import Nix.Eval hiding (WHNFValue, LazyValue, LEnvironment,
                         LNative, LClosure)
 import qualified Data.HashMap.Strict as H

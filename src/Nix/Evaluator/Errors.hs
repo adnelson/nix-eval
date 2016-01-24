@@ -1,9 +1,9 @@
 -- | Describes errors that can be encountered during evaluation.
-module Nix.Eval.Errors where
+module Nix.Evaluator.Errors where
 
 import Nix.Common
 import Nix.Values.Generic
-import Nix.Eval.RuntimeTypes
+import Nix.Evaluator.RuntimeTypes
 import qualified Data.Set as S
 
 -- | The type of errors which can occur during evaluation.
@@ -33,6 +33,8 @@ data EvalError
   -- ^ When not enough arguments are passed to a function.
   | ExtraArguments [Text]
   -- ^ When too many arguments are passed to a function.
+  | DuplicateKey Text
+  -- ^ Raised when the same key is assigned twice in an attribute set.
   | NotImplemented Text
   -- ^ For native functions we haven't implemented yet.
   deriving (Show, Eq, Typeable, Generic)

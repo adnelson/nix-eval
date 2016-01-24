@@ -1,15 +1,11 @@
 module Nix.Expressions where
 
 import Nix.Common
-import Nix.Types (NBinaryOp(..), NUnaryOp(..), Formals(..),
-                  FormalParamSet(..))
+import Nix.Expr (NBinaryOp(..), NUnaryOp(..), Params(..), ParamSet(..))
 import Nix.Constants
 import qualified Data.HashMap.Strict as H
 import qualified Data.Map as M
 import qualified Data.Set as S
-
--- | Describes how function parameters can be formed.
-type Params = Formals Expression
 
 -- | A simpler expression type than the full nix language expression; this
 -- type can be seen as a desugared nix expression type.
@@ -31,7 +27,7 @@ data Expression
   -- these as curried functions.
   | EUnaryOp NUnaryOp Expression
   -- ^ A unary operation; once again we could just use a function call.
-  | ELambda Params Expression
+  | ELambda (Params Expression) Expression
   -- ^ Lambda functions.
   | EApply Expression Expression
   -- ^ Function application.
@@ -141,11 +137,11 @@ infixl 1 @@
 
 -- | Lambda shorthand.
 (-->) :: Text -> Expression -> Expression
-param --> body = ELambda (FormalName param) body
+param --> body = ELambda (Param param) body
 
 infixr 1 -->
 
-paramList :: FormalParamSet e -> [(Text, Maybe e)]
+paramList :: ParamSet e -> [(Text, Maybe e)]
 paramList (FixedParamSet params) = M.toList params
 paramList (VariadicParamSet params) = M.toList params
 

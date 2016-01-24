@@ -47,3 +47,13 @@ fromText = fromConstant . String
 
 fromBool :: FromConstant t => Bool -> t
 fromBool = fromConstant . Bool
+
+-- | Conversion to environment variables for constants.
+constantToEnvString :: Constant -> Text
+constantToEnvString = \case
+  String s -> s
+  Int i -> tshow i
+  Path p -> pathToText p
+  Bool True -> "1"
+  Bool False -> ""
+  Null -> ""

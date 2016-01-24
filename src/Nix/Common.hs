@@ -18,14 +18,15 @@ module Nix.Common (
 
 import           ClassyPrelude              hiding (FilePath, asList, assert,
                                              bracket, filterM, find, forM_,
-                                             ioError, mapM_, maximum, maximumBy,
-                                             minimum, readFile, replicateM,
-                                             sequence_, stripPrefix, try,
-                                             writeFile, ($>), (</>))
+                                             ioError, mapM_, maximum,
+                                             maximumBy, minimum, readFile,
+                                             replicateM, sequence_,
+                                             stripPrefix, try, writeFile,
+                                             ($>), (</>))
 import           Control.DeepSeq            (NFData (..))
 import           Control.Monad.Identity     (Identity (..))
 import           Control.Monad.Except hiding (foldM)
-import           Control.Monad.State.Strict (MonadState (..), StateT)
+import           Control.Monad.State.Strict (MonadState(..), StateT(..))
 import           Data.Fix
 import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as H

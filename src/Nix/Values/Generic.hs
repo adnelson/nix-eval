@@ -7,16 +7,16 @@ module Nix.Values.Generic where
 import Nix.Common
 import Nix.Expressions
 import Nix.Constants
-import Nix.Types (NExpr, Formals)
+import Nix.Expr (NExpr, Params)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Map as M
 
--------------------------------------------------------------------------------
--- Values ---------------------------------------------------------------------
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- * Values ------------------------------------------------------------------
+------------------------------------------------------------------------------
 
 -- | The type of runtime values. Is polymorphic over the computation
 -- context type
@@ -27,9 +27,9 @@ data Value m
   -- ^ Attribute set values.
   | VList (Seq (m (Value m)))
   -- ^ List values.
-  | VFunction Params (Closure m)
+  | VFunction (Params Expression) (Closure m)
   -- ^ Functions, with parameters and a closure.
-  | VFunction' (Formals NExpr) (Closure' m)
+  | VFunction' (Params NExpr) (Closure' m)
   | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
 
@@ -78,7 +78,10 @@ instance Monad m => FromConstant (m (Value m)) where
   fromConstants = return . fromConstants
   fromConstantSet = return . fromConstantSet
 
--- Convenience functions
+------------------------------------------------------------------------------
+-- * Convenience functions ---------------------------------------------------
+------------------------------------------------------------------------------
+
 -- | Shorthand for creating an Environment from a list.
 mkEnv :: Monad m => [(Text, Value m)] -> Environment m
 mkEnv = Environment . H.fromList . map (map pure)
@@ -116,7 +119,7 @@ listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Monad m => Params -> Closure m -> Value m
+functionV :: Monad m => Params Expression -> Closure m -> Value m
 functionV params closure = VFunction params closure
 
 -- | Wrap a native into a value.
@@ -127,9 +130,9 @@ nativeV = VNative
 pNativeV :: Monad m => Native m v -> m (Value m)
 pNativeV = pure . nativeV
 
--------------------------------------------------------------------------------
--- Environments and Attribute Sets --------------------------------------------
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- * Environments and Attribute Sets -----------------------------------------
+------------------------------------------------------------------------------
 
 -- | An environment is conceptually just a name -> value mapping, but the
 -- element type is parametric to allow usage of different kinds of values.
@@ -215,9 +218,9 @@ emptyE = Environment mempty
 emptyC :: Expression -> Closure m
 emptyC = Closure emptyE
 
--------------------------------------------------------------------------------
--- Native Values --------------------------------------------------------------
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- * Native Values -----------------------------------------------------------
+------------------------------------------------------------------------------
 
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
@@ -248,23 +251,3 @@ applyNative2 (NativeFunction func) x y = do
 unwrapNative :: Monad m => Native m v -> m (Value m)
 unwrapNative (NativeValue v) = v
 unwrapNative n = return $ VNative n
-
--------------------------------------------------------------------------------
--- * Abstract evaluation contexts
-------------------------------------------------------------------------------
--- Not every monad can act as an evaluation context for Nix
--- expressions. In particular, there are certain primitive
--- side-effects we must support, such as printing to screen for the
--- `trace` builtin, or reading the contents of a directory.
--- So we have a more specialized type class here, which is actually
--- made up of a few more specific type classes.
-
--- | This class doesn't express any of its own methods; rather it just
--- wraps several other type classes into one.
-class (WriteMessage m) => Nix m
-
--- | A monad in which we can print messages. This lets us implement
--- the `trace` builtin function.
-class Monad m => WriteMessage m where
-  -- | Write a message (e.g. to stdout)
-  writeMessage :: Text -> m ()

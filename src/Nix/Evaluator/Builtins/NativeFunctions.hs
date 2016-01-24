@@ -1,32 +1,25 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-module Nix.Eval.Builtins.NativeFunctions where
+module Nix.Evaluator.Builtins.NativeFunctions where
 
 import Nix.Common
-import Nix.Types (NBinaryOp(..), NUnaryOp(..))
+import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
 import Nix.Constants
 import Nix.Expressions
-import Nix.Eval.Evaluator (evalApply)
-import Nix.Eval.Errors
-import Nix.Eval.RuntimeTypes
+import Nix.Evaluator.Contexts (WriteMessage(..))
+import Nix.Evaluator.Evaluator (evalApply)
+import Nix.Evaluator.Errors
+import Nix.Evaluator.RuntimeTypes
 import Nix.Values
 import Nix.Values.NativeConversion
-import Nix.Eval.Builtins.Operators (binop_eq)
+import Nix.Evaluator.Builtins.Operators (binop_eq)
 
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 
--- | Conversion to environment variables for constants.
-constantToEnvString :: Constant -> Text
-constantToEnvString (String s) = s
-constantToEnvString (Int i) = tshow i
-constantToEnvString (Path p) = pathToText p
-constantToEnvString (Bool True) = "1"
-constantToEnvString (Bool False) = ""
-constantToEnvString Null = ""
-
 -- | Convert a value to a env-variable-compatible string.
-valueToEnvString :: Monad m => WHNFValue m -> Eval m Text
+valueToEnvString :: Monad ctx =>
+                    WHNFValue ctx ->
+                    Eval ctx Text
 valueToEnvString val = case val of
   VConstant c -> pure $ constantToEnvString c
   VList vals -> do

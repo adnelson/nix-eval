@@ -1,5 +1,5 @@
 -- | Describes the types of objects that can be encountered at runtime.
-module Nix.Eval.RuntimeTypes where
+module Nix.Evaluator.RuntimeTypes where
 
 import Nix.Common
 import Nix.Constants

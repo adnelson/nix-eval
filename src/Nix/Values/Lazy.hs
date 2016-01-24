@@ -4,8 +4,9 @@ module Nix.Values.Lazy where
 
 import Nix.Common
 import Nix.Expressions
-import Nix.Eval.Errors
-import Nix.Eval.RuntimeTypes
+import Nix.Evaluator.Errors
+import Nix.Evaluator.RuntimeTypes
+import Nix.Evaluator.Contexts (WriteMessage(..))
 import Nix.Constants
 import Nix.Values.Generic
 import qualified Data.HashMap.Strict as H

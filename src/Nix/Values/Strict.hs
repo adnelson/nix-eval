@@ -2,7 +2,7 @@ module Nix.Values.Strict where
 
 import Nix.Common
 import Nix.Expressions
-import Nix.Eval.Errors
+import Nix.Evaluator.Errors
 import Nix.Constants
 import Nix.Values.Generic
 import Nix.Values.Lazy

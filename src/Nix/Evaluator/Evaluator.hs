@@ -1,14 +1,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Nix.Eval.Evaluator where
+module Nix.Evaluator.Evaluator where
 
-import Nix.Common                       hiding (trace)
+import Control.Monad.State.Strict (MonadState(..), modify, execStateT)
+import Nix.Common
 import Nix.Constants
 import Nix.Expressions
-import Nix.Eval.Builtins.Operators (interpretBinop, interpretUnop)
-import Nix.Eval.Errors
-import Nix.Types (Formals(..), FormalParamSet(..), NExpr,
-                  NUnaryOp(..), NBinaryOp(..), NOperF(..),
-                  NExprF(..), NAtom(..), NString(..), Binding(..))
+import Nix.Evaluator.Builtins.Operators (interpretBinop, interpretUnop)
+import Nix.Evaluator.Errors
+import Nix.Expr (Params(..), ParamSet(..), NExpr, Antiquoted(..),
+                 NUnaryOp(..), NBinaryOp(..), NKeyName(..),
+                 NExprF(..), NAtom(..), NString(..), Binding(..))
 import Nix.Values
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
@@ -20,10 +21,10 @@ evalApply :: Monad m => LazyValue m -> LazyValue m -> LazyValue m
 evalApply func arg = func >>= \case
   VNative (NativeFunction f) -> unwrapNative =<< f arg
   VFunction' params (Closure' cEnv body) -> case params of
-    FormalName param -> do
+    Param param -> do
       let env' = insertEnvL param arg cEnv
       evalHnix env' body
-    FormalSet params mname -> arg >>= \case
+    ParamSet params mname -> arg >>= \case
       -- We need the argument to be an attribute set to unpack arguments.
       VAttrSet argSet -> do
         let
@@ -39,8 +40,9 @@ evalApply func arg = func >>= \case
                 -- If the argument is missing, see if there's a default.
                 Nothing -> case mdef of
                   -- Evaluate the default expression and insert it.
-                  Just def -> (insertEnvL key (evalHnix callingEnv def) newEnv,
-                               missingArgs)
+                  Just def -> do
+                    (insertEnvL key (evalHnix callingEnv def) newEnv,
+                     missingArgs)
                   -- Otherwise record it as an error.
                   Nothing -> (newEnv, key : missingArgs)
           -- Fold through the parameters with the step function.
@@ -68,10 +70,10 @@ evalApply func arg = func >>= \case
       v -> expectedAttrs v
 
   VFunction params (Closure cEnv body) -> case params of
-    FormalName param -> do
+    Param param -> do
       let env' = insertEnvL param arg cEnv
       evaluate env' body
-    FormalSet params mname -> arg >>= \case
+    ParamSet params mname -> arg >>= \case
       -- We need the argument to be an attribute set to unpack arguments.
       VAttrSet argSet -> do
         let
@@ -116,6 +118,55 @@ evalApply func arg = func >>= \case
       v -> expectedAttrs v
   v -> expectedFunction v
 
+-- | Evaluate a nix string into actual text.
+evalString :: Monad ctx => LEnvironment ctx -> NString NExpr -> Eval ctx Text
+evalString env = \case
+  DoubleQuoted strs -> concat <$> mapEval strs
+  Indented strs -> intercalate "\n" <$> mapEval strs
+  where mapEval = mapM (evalAntiquoted pure env)
+
+-- | Evaluate an 'Antiquoted', resulting in 'Text'.
+evalAntiquoted :: Monad ctx =>
+                  (txt -> Eval ctx Text) ->
+                  LEnvironment ctx ->
+                  Antiquoted txt NExpr ->
+                  Eval ctx Text
+evalAntiquoted convertor env = \case
+  Plain string -> convertor string
+  Antiquoted expr -> evalHnix env expr >>= \case
+    VConstant (String str) -> pure str
+    v -> expectedString v
+
+-- | Evaluate an 'NKeyName', which must result in 'Text'.
+evalKeyName :: Monad ctx => LEnvironment ctx ->
+               NKeyName NExpr -> Eval ctx Text
+evalKeyName env = \case
+  StaticKey text -> pure text
+  DynamicKey antiquoted -> evalAntiquoted convertor env antiquoted
+  where convertor = evalString env
+
+-- | Convert a list of bindings to an attribute set.
+bindingsToSet :: Monad ctx =>
+                 LEnvironment ctx ->
+                 [Binding NExpr] ->
+                 Eval ctx (LAttrSet ctx)
+bindingsToSet env bindings = flip execStateT emptyE $ do
+  forM_ bindings $ \case
+    NamedVar [] _ -> return ()
+    -- A single key assigned to a single value.
+    NamedVar [keyExpr] expr -> do
+      -- Evaluate the key name expression to get the key as text.
+      key <- lift $ evalKeyName env keyExpr
+      -- Look the key up in the attribute set we're building.
+      lookupEnv key <$> get >>= \case
+        -- If it's not already in the env, add it.
+        Nothing -> modify $ insertEnvL key $ evalHnix env expr
+        -- Otherwise, this is an error.
+        Just _ -> throwError $ DuplicateKey key
+    NamedVar (key:keys) expr -> undefined
+    Inherit Nothing keypaths -> undefined
+    Inherit (Just expr) keypaths -> undefined
+
 
 evalHnix :: Monad m =>
             LEnvironment m ->
@@ -127,19 +178,19 @@ evalHnix env (Fix expr) = do
     NConstant (NInt i) -> convert i
     NConstant (NBool b) -> convert b
     NConstant NNull -> pure nullV
-    NStr (NUri uri) -> convert uri
+    NConstant (NUri uri) -> convert uri
     NSym name -> case lookupEnv name env of
       Nothing -> throwError $ NameError name (envKeySet env)
       Just val -> val
     NList exprs -> pure $ VList $ fromList $ map recur exprs
     NApp func arg -> recur func `evalApply` recur arg
     NAbs param body -> pure $ VFunction' param $ Closure' env body
-    NOper (NUnary op innerExpr) -> do
+    NUnary op innerExpr -> do
       -- Translate the operator into a native function.
       let func = interpretUnop op
       -- Apply the function to the inner expression.
       unwrapNative =<< applyNative func (recur innerExpr)
-    NOper (NBinary op left right) -> do
+    NBinary op left right -> do
       -- Turn the operator into a binary native function.
       let func = interpretBinop op
       -- Apply the function to the two arguments and unwrap the result.

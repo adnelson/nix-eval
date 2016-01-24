@@ -2,7 +2,7 @@ module Nix.Spec.EvaluatorSpec (main, spec) where
 
 import Test.Hspec
 import Test.QuickCheck (property)
-import Nix.Types (FormalParamSet(..), Formals(..))
+import Nix.Expr (FormalParamSet(..), Formals(..))
 import Nix.Common
 import Nix.Constants
 import Nix.Values hiding (WHNFValue, LazyValue)
