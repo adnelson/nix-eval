@@ -26,6 +26,7 @@ type SEnvironment = Environment Identity
 strictToLazy :: Monad m => StrictValue -> WHNFValue m
 strictToLazy = \case
   VConstant c -> VConstant c
+  VString s -> VString s
   VAttrSet attrs -> VAttrSet $ transE attrs
   VList vals -> VList $ map trans vals
   VFunction p (Closure env e) -> VFunction p (Closure (transE env) e)

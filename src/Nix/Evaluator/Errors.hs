@@ -62,7 +62,7 @@ instance (MonadError EvalError m, HasRTType t m) => HasRTType (m t) m where
   typeOf res = res >>= typeOf
 
 instance (MonadError EvalError m) => HasRTType (Value m) m where
-  typeOf (VConstant constant) = pure $ typeOfConstant constant
+  typeOf (VConstant atom) = pure $ typeOfAtom atom
   typeOf (VAttrSet _) = pure RT_Set
   typeOf (VList _) = pure RT_List
   typeOf (VFunction _ _) = pure RT_Lambda

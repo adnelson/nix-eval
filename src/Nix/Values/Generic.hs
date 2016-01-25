@@ -6,7 +6,7 @@ module Nix.Values.Generic where
 
 import Nix.Common
 import Nix.Expressions
-import Nix.Constants
+import Nix.Atoms
 import Nix.Expr (NExpr, Params)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
@@ -21,8 +21,11 @@ import qualified Data.Map as M
 -- | The type of runtime values. Is polymorphic over the computation
 -- context type
 data Value m
-  = VConstant Constant
+  = VConstant NAtom
   -- ^ Constant values (isomorphic to constant expressions).
+  | VString Text
+  -- ^ Text in nix expressions isn't properly constant, since it can have
+  -- interpolated expressions. So strings are not part of constants.
   | VAttrSet (AttrSet m)
   -- ^ Attribute set values.
   | VList (Seq (m (Value m)))
@@ -35,10 +38,13 @@ data Value m
 
 instance Extract m => Show (Value m) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
+  show (VString text) = show text
   show (VAttrSet set) = show set
   show (VList vs) = show $ map extract vs
   show (VFunction params closure) = concat [ show params, " => ("
                                            , show closure, ")"]
+  show (VFunction' params closure) = concat [ show params, " => ("
+                                            , show closure, ")"]
   show (VNative (NativeValue v)) = show $ extract v
   show (VNative _) = "(native function)"
 
@@ -65,18 +71,18 @@ instance Extract m => Ord (Value m) where
   VNative _ <= _ = True
 
 instance IsString (Value m) where
-  fromString = VConstant . fromString
+  fromString = VString . fromString
 
-instance Monad m => FromConstant (Value m) where
-  fromConstant = VConstant
-  fromConstants = VList . fromList . map (return . fromConstant)
-  fromConstantSet set = VAttrSet $ Environment $
-    map (return . fromConstant) set
+instance Monad m => FromAtom (Value m) where
+  fromAtom = VConstant
+  fromAtoms = VList . fromList . map (return . fromAtom)
+  fromAtomSet set = VAttrSet $ Environment $
+    map (return . fromAtom) set
 
-instance Monad m => FromConstant (m (Value m)) where
-  fromConstant = return . fromConstant
-  fromConstants = return . fromConstants
-  fromConstantSet = return . fromConstantSet
+instance Monad m => FromAtom (m (Value m)) where
+  fromAtom = return . fromAtom
+  fromAtoms = return . fromAtoms
+  fromAtomSet = return . fromAtomSet
 
 ------------------------------------------------------------------------------
 -- * Convenience functions ---------------------------------------------------
@@ -96,19 +102,19 @@ mkClosure env expr = Closure (mkEnv env) expr
 
 -- | Create a value from a string.
 strV :: Monad m => Text -> Value m
-strV = fromConstant . String
+strV = VString
 
 -- | Create a value from an integer.
 intV :: Monad m => Integer -> Value m
-intV = fromConstant . Int
+intV = convert
 
 -- | Create a value from a bool.
 boolV :: Monad m => Bool -> Value m
-boolV = fromConstant . Bool
+boolV = convert
 
 -- | Create a null value.
 nullV :: Monad m => Value m
-nullV = fromConstant Null
+nullV = VConstant NNull
 
 -- | Create an attribute set value.
 attrsV :: Monad m => [(Text, Value m)] -> Value m
@@ -169,6 +175,9 @@ instance Extract m => Ord (Closure m) where
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
+
+instance Extract m => Show (Closure' m) where
+  show (Closure' env body) = "with " <> show env <> "; " <> show body
 
 -- | Get the size of an environment.
 envSize :: Environment m -> Int

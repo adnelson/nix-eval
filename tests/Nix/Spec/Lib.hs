@@ -7,14 +7,15 @@ import Data.Either
 import Control.Monad.State.Strict
 import Test.Hspec
 import Test.QuickCheck hiding (Result)
-import Nix.Expr (Formals(..))
+import Nix.Atoms
+import Nix.Expr (Params(..))
 import Nix.Common
-import Nix.Expr (NBinaryOp(..))
-import Nix.Eval hiding (WHNFValue, LazyValue, LEnvironment,
-                        LNative, LClosure)
+import Nix.Expr
+import Nix.Evaluator hiding (WHNFValue, LazyValue, LEnvironment,
+                             LNative, LClosure)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
-import qualified Nix.Eval as Eval
+import qualified Nix.Evaluator as Eval
 
 -- | Make an orphan Text instance; not sure why this isn't there already...
 instance Arbitrary Text where
@@ -31,34 +32,32 @@ instance Arbitrary a => Arbitrary (Seq a) where
 instance (Arbitrary a, Ord a) => Arbitrary (Set a) where
   arbitrary = S.fromList <$> arbitrary
 
-instance Arbitrary Constant where
+instance Arbitrary NAtom where
   arbitrary = oneof
-    [ String <$> arbitrary
-    , Path . fromString . (\(i::Int) -> "/foo/bar" <> show i) <$> arbitrary
-    , Int <$> arbitrary
-    , Bool <$> arbitrary
-    , pure Null ]
+    [ NInt <$> arbitrary
+    , NBool <$> arbitrary
+    , NUri <$> arbitrary
+    , pure NNull ]
 
 -- | We'll make arbitrary expressions but only containing constants,
 -- so that we don't get nameerrors and the like.
 instance Arbitrary Expression where
   arbitrary = oneof
-    [ EConstant <$> arbitrary
-    , EList <$> arbitrary ]
+    [ Fix . NConstant <$> arbitrary ]
 
 instance Monad m => Arbitrary (Value m) where
   arbitrary = oneof
     [ VConstant <$> arbitrary
     , VAttrSet <$> arbitrary
     , VList <$> map (map return) arbitrary
-    , VFunction <$> (FormalName <$> arbitrary) <*> arbitrary
+    , VFunction' <$> (Param <$> arbitrary) <*> arbitrary
     , VNative . NativeValue . return <$> arbitrary ]
 
 instance Monad m => Arbitrary (Environment m) where
   arbitrary = Environment <$> map (map return) arbitrary
 
-instance Monad m => Arbitrary (Closure m) where
-  arbitrary = Closure <$> arbitrary <*> arbitrary
+instance Monad m => Arbitrary (Closure' m) where
+  arbitrary = Closure' <$> arbitrary <*> arbitrary
 
 instance Monad m => Arbitrary (Native m (Value m)) where
   arbitrary = NativeValue <$> map return arbitrary
@@ -76,6 +75,28 @@ instance Arbitrary EvalError where
 
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ pure <$> enumFrom RT_Null
+
+instance IsString Expression where
+  fromString = mkSym . fromString
+
+-- | Expressions can be parsed from numbers.
+instance Num Expression where
+  fromInteger = mkInt
+  e1@(Fix (NList _)) + e2 = mkBinop NConcat e1 e2
+  e1 + e2 = mkBinop NPlus e1 e2
+  e1 - e2 = mkBinop NMinus e1 e2
+  e1 * e2 = mkBinop NMult e1 e2
+  negate = Fix . NUnary NNeg
+  abs = error "No absolute value for Nix expressions"
+  signum = error "No sign for Nix expressions"
+
+instance FromAtom Expression where
+  fromAtom = Fix . NConstant
+  fromAtoms = mkList . map fromAtom
+  fromAtomSet = attrsE . map (map fromAtom) . H.toList
+
+convertI :: FromAtom t => Integer -> t
+convertI = convert
 
 -- | We can use this to mock out things like filesystem interaction
 -- and message writing.
@@ -146,7 +167,7 @@ evalStrict2 = map snd . evalStrict
 
 evalStrictWithEnv :: LEnvironment -> Expression ->
                     IO (Either EvalError StrictValue, MockState)
-evalStrictWithEnv env expr = runMock $ lazyToStrict $ evaluate env expr
+evalStrictWithEnv env expr = runMock $ lazyToStrict $ evalHnix env expr
 
 runNativeStrict :: LNative WHNFValue ->
                    IO (Either EvalError StrictValue, MockState)
@@ -176,7 +197,7 @@ shouldEvalTo expr val = do
 
 shouldEvalToWithEnv :: LEnvironment -> Expression -> StrictValue -> Expectation
 shouldEvalToWithEnv env expr val = do
-  result <- runMock1 $ lazyToStrict $ evaluate env expr
+  result <- runMock1 $ lazyToStrict $ evalHnix env expr
   result `shouldBe` pure val
 
 shouldBeError :: LazyValue -> Expectation
@@ -202,11 +223,11 @@ shouldBeErrorWith action strings = do
 
 -- | An expression that will always fail to evaluate.
 failingExpression :: Expression
-failingExpression = "throw" @@ strE "failed on purpose"
+failingExpression = "builtins" !. "throw" @@ mkStr "failed on purpose"
 
 -- | An expression that will always succeed evaluation.
 succeedingExpression :: Expression
-succeedingExpression = strE "success"
+succeedingExpression = mkStr "success"
 
 shouldBeValid :: Show a => Eval TestM a -> Expectation
 shouldBeValid action = do
@@ -217,7 +238,7 @@ shouldBeValid action = do
 
 shouldErrorWithEnv :: LEnvironment -> Expression -> [String] -> Expectation
 shouldErrorWithEnv env expr strings = do
-  res <- runMock1 $ lazyToStrict $ evaluate env expr
+  res <- runMock1 $ lazyToStrict $ evalHnix env expr
   res `shouldSatisfy` \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
@@ -226,7 +247,7 @@ shouldEval :: Expression -> Expectation
 shouldEval expr = shouldBeValid $ lazyToStrict $ performEval expr
 
 shouldEvalWithEnv :: LEnvironment -> Expression -> Expectation
-shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evaluate env expr
+shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evalHnix env expr
 
 infixl 0 `shouldEvalTo`
 

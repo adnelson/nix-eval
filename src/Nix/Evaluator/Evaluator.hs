@@ -3,13 +3,14 @@ module Nix.Evaluator.Evaluator where
 
 import Control.Monad.State.Strict  --(MonadState(..), modify, execStateT)
 import Nix.Common
-import Nix.Constants
+--import Nix.Constants
 import Nix.Expressions
 import Nix.Evaluator.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Evaluator.Errors
+import Nix.Atoms
 import Nix.Expr (Params(..), ParamSet(..), NExpr, Antiquoted(..),
                  NUnaryOp(..), NBinaryOp(..), NKeyName(..), NExprF(..),
-                 NAtom(..), NString(..), Binding(..), mkSym)
+                 NString(..), Binding(..), mkSym, mkDot)
 import Nix.Values
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
@@ -135,7 +136,7 @@ evalAntiquoted :: Monad ctx =>
 evalAntiquoted convertor env = \case
   Plain string -> convertor string
   Antiquoted expr -> evalHnix env expr >>= \case
-    VConstant (String str) -> pure str
+    VString str -> pure str
     v -> expectedString v
 
 -- | Evaluate an 'NKeyName', which must result in 'Text'.
@@ -145,15 +146,6 @@ evalKeyName env = \case
   StaticKey text -> pure text
   DynamicKey antiquoted -> evalAntiquoted convertor env antiquoted
   where convertor = evalString env
-
---attrPathsToSet :: Monad ctx =>
---                  LEnvironment ctx ->
---                  [(Text, [Text], NExpr)] ->
---                  Eval ctx (LAttrSet ctx)
---attrPathsToSet env = loop emptyE where
---  loop set = \case
---    [] -> pure set
---    ((topKey, subKeys, expr):rest) -> do
 
 -- | Data type to represent the state of an attribute set as it's built.
 -- Values of this type are either actual lazy values ('Defined'), or they are
@@ -176,10 +168,6 @@ convertIP (InProgress record) = do
       step aset (key, asip) = insertEnvL key (convertIP asip) aset
   pure $ VAttrSet $ foldl' step emptyE items
 
-
-mkDot :: NExpr -> Text -> NExpr
-mkDot e key = Fix $ NSelect e [StaticKey key] Nothing
-
 insertKeyPath :: Monad ctx =>
                  [Text] ->
                  LazyValue ctx ->
@@ -201,10 +189,10 @@ bindingsToSet env bindings = do
   let start = InProgress mempty
   finish <- flip execStateT start $ forM_ bindings $ \case
     NamedVar keys expr -> do
-      let lval = evalHnix env expr
       -- Convert the key expressions to a list of text.
       keyPath <- lift $ mapM (evalKeyName env) keys
       -- Insert the key into the in-progress set.
+      let lval = evalHnix env expr
       get >>= lift . insertKeyPath keyPath lval >>= put
     Inherit maybeExpr keyNames -> forM_ keyNames $ \keyName -> do
       -- Evaluate the keyName to a string.
@@ -218,6 +206,11 @@ bindingsToSet env bindings = do
   -- Convert the finished in-progress object into a LazyValue.
   convertIP finish
 
+paramList :: ParamSet e -> [(Text, Maybe e)]
+paramList (FixedParamSet params) = M.toList params
+paramList (VariadicParamSet params) = M.toList params
+
+
 evalHnix :: Monad m =>
             LEnvironment m ->
             NExpr ->
@@ -225,16 +218,14 @@ evalHnix :: Monad m =>
 evalHnix env (Fix expr) = do
   let recur = evalHnix env
   case expr of
-    NConstant (NInt i) -> convert i
-    NConstant (NBool b) -> convert b
-    NConstant NNull -> pure nullV
-    NConstant (NUri uri) -> convert uri
+    NConstant atom -> pure $ VConstant atom
     NSym name -> case lookupEnv name env of
       Nothing -> throwError $ NameError name (envKeySet env)
       Just val -> val
     NList exprs -> pure $ VList $ fromList $ map recur exprs
     NApp func arg -> recur func `evalApply` recur arg
     NAbs param body -> pure $ VFunction' param $ Closure' env body
+    NSet bindings -> bindingsToSet env bindings
     NUnary op innerExpr -> do
       -- Translate the operator into a native function.
       let func = interpretUnop op
@@ -253,7 +244,7 @@ evaluate :: Monad m =>
             Expression     -> -- ^ Expression to evaluate.
             LazyValue m       -- ^ Result of evaluation.
 evaluate env expr = case expr of
-  EConstant constant -> return $ fromConstant constant
+  EConstant _ -> undefined
   EVar name -> case lookupEnv name env of
     Nothing -> throwError $ NameError name (envKeySet env)
     Just val -> val

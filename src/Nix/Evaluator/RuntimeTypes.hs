@@ -2,7 +2,7 @@
 module Nix.Evaluator.RuntimeTypes where
 
 import Nix.Common
-import Nix.Constants
+import Nix.Atoms
 import qualified Data.Text as T
 
 -- | Runtime types of values.
@@ -23,10 +23,9 @@ instance NFData RuntimeType
 typeToString :: RuntimeType -> Text
 typeToString = T.toLower . T.replace "RT_" "" . tshow
 
--- | Constants have a runtime type which can be determined in O(1).
-typeOfConstant :: Constant -> RuntimeType
-typeOfConstant (String _) = RT_String
-typeOfConstant (Path _) = RT_Path
-typeOfConstant (Int _) = RT_Int
-typeOfConstant (Bool _) = RT_Bool
-typeOfConstant Null = RT_Null
+-- | Atoms have a runtime type which can be determined in O(1).
+typeOfAtom :: NAtom -> RuntimeType
+typeOfAtom (NUri _) = RT_String
+typeOfAtom (NInt _) = RT_Int
+typeOfAtom (NBool _) = RT_Bool
+typeOfAtom NNull = RT_Null
