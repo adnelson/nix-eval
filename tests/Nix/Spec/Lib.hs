@@ -6,7 +6,7 @@ module Nix.Spec.Lib where
 import Data.Either
 import Control.Monad.State.Strict
 import Test.Hspec
-import Test.QuickCheck hiding (Result)
+import Test.QuickCheck hiding (Result, (==>))
 import Nix.Atoms
 import Nix.Expr (Params(..))
 import Nix.Common

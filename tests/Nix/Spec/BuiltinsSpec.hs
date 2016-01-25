@@ -1,7 +1,7 @@
 module Nix.Spec.BuiltinsSpec (main, spec) where
 
 import Test.Hspec
-import Test.QuickCheck
+import Test.QuickCheck hiding ((==>))
 import Nix.Common
 import Nix.Atoms (NAtom(..))
 import Nix.Expr
@@ -93,24 +93,24 @@ describeTopLevel name = case name of
     wrapDescribe = describe ("top-level builtin " <> show name)
     mapSpec = do
       it "should map a function over a list" $ property $ \list ->
-        "map" @@ ("x" --> "x") @@ fromAtoms list
+        "map" @@ ("x" ==> "x") @@ fromAtoms list
           `shouldEvalTo` fromAtoms list
       it "should map the +1 function over a list" $ property $ \nums -> do
-          "map" @@ ("x" --> "x" + 1) @@ (fromAtoms $ map NInt nums)
+          "map" @@ ("x" ==> "x" + 1) @@ (fromAtoms $ map NInt nums)
             `shouldEvalTo` fromAtoms (map (\i -> NInt (i + 1)) nums)
       it "should map over a nested list" $ property $ \nums1 nums2 -> do
         let list1 = fromAtoms $ map NInt nums1
             list2 = fromAtoms $ map NInt nums2
             list3 = mkList [list1, list2]
         -- The ID function over a nested list
-        "map" @@ ("x" --> "x") @@ list3
+        "map" @@ ("x" ==> "x") @@ list3
           `shouldEvalTo` listV (map (fromAtoms . map NInt) [nums1, nums2])
         -- Mapping the map function
-        "map" @@ ("map" @@ ("x" --> "x")) @@ list3
+        "map" @@ ("map" @@ ("x" ==> "x")) @@ list3
           `shouldEvalTo` listV [fromAtoms $ map NInt nums1,
                                 fromAtoms $ map NInt nums2]
         -- Mapping functions which do things
-        "map" @@ ("map" @@ ("x" --> "x" * 2)) @@ list3
+        "map" @@ ("map" @@ ("x" ==> "x" * 2)) @@ list3
           `shouldEvalTo` listV [fromAtoms $ map (NInt . (*2)) nums1,
                                 fromAtoms $ map (NInt . (*2)) nums2]
 
@@ -196,7 +196,7 @@ describeBuiltinKey name = case name of
       bi "isString" @@ mkInt 1 `shouldEvalTo` convert False
   "isFunction" -> wrapDescribe $ do
     it "should be true for functions" $ do
-      bi "isFunction" @@ ("x" --> "x") `shouldEvalTo` convert True
+      bi "isFunction" @@ ("x" ==> "x") `shouldEvalTo` convert True
       bi "isFunction" @@ bi "isFunction" `shouldEvalTo` convert True
       -- TODO test functions that unpack attribute set args
     it "should be false for others" $ do
@@ -208,7 +208,7 @@ describeBuiltinKey name = case name of
     mkTest "null" mkNull
     mkTest "list" (mkList [])
     mkTest "set" (attrsE [])
-    mkTest "lambda" ("x" --> "x")
+    mkTest "lambda" ("x" ==> "x")
     mkTest "lambda" (bi "typeOf")
     mkTest "int" 1
     mkTest "bool" (mkBool False)
@@ -286,7 +286,7 @@ describeBuiltinKey name = case name of
       let traced = bi "trace" @@ mkStr "hello!" @@ 1
           -- Here we're never using the second argument, so the
           -- expression shouldn't ever get evaluated.
-          expr = ("x" --> ("_" --> "x")) @@ 3 @@ traced
+          expr = ("x" ==> ("_" ==> "x")) @@ 3 @@ traced
       (result, state) <- evalStrict expr
       result `shouldBe` pure (intV 3)
       msWriteBuffer state `shouldBe` fromList []

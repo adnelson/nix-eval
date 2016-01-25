@@ -39,23 +39,23 @@ testBalloonSpec = describe "test-balloon expressions" $ do
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
   it "should evaluate the identity function" $ do
-    shouldEvalToWithEnv emptyE ("x" --> "x")
+    shouldEvalToWithEnv emptyE ("x" ==> "x")
                                (functionV (Param "x") (emptyC "x"))
   it "should evaluate nested functions" $ do
-    shouldEvalToWithEnv emptyE ("x" --> "y" --> "x")
+    shouldEvalToWithEnv emptyE ("x" ==> "y" ==> "x")
                                (functionV (Param "x")
-                                          (emptyC ("y" --> "x")))
+                                          (emptyC ("y" ==> "x")))
   it "should evaluate function applications" $ do
-    let expr = ("x" --> "x") @@ (mkStr "hello")
+    let expr = ("x" ==> "x") @@ mkStr "hello"
     expr `shouldEvalTo` "hello"
   it "should capture environment in closure" $ do
     let env = mkEnv [("x", intV 1)]
-    shouldEvalToWithEnv env (("foo" --> "x") @@ mkInt 2) (intV 1)
+    shouldEvalToWithEnv env (("foo" ==> "x") @@ mkInt 2) (intV 1)
   describe "unpacking arguments" $ do
     describe "without defaults" $ do
       let mkParams = FixedParamSet . M.fromList . map (\p -> (p, Nothing))
       let params = mkParams ["foo", "bar"]
-      let func = mkFunction (ParamSet params Nothing) ("foo" + "bar")
+      let func = ParamSet params Nothing ==> "foo" + "bar"
       it "should unpack attribute sets" $ do
         func @@ attrsE [("foo", 1), ("bar", 2)] `shouldEvalTo` intV 3
       it "should fail if argument is not a set" $ do
@@ -67,8 +67,7 @@ functionsSpec = describe "functions" $ do
         Left (MissingArguments args) <- evalStrict1 (func @@ attrsE [])
         S.fromList args `shouldBe` S.fromList ["foo", "bar"]
       it "should allow assigning the argument to a variable" $ do
-        let func = mkFunction (ParamSet params (Just "args"))
-                              ("args" !. "foo")
+        let func = ParamSet params (Just "args") ==> ("args" !. "foo")
         func @@ attrsE [("foo", 1), ("bar", mkNull)] `shouldEvalTo` intV 1
       it "should fail if extra args passed to fixed param set" $ do
         func @@ attrsE [("foo", 1), ("bar", 2), ("baz", 3)]
@@ -76,7 +75,7 @@ functionsSpec = describe "functions" $ do
     describe "default arguments" $ do
       let params = FixedParamSet $ M.fromList [("foo", Nothing),
                                                ("bar", Just 1)]
-          func = mkFunction (ParamSet params Nothing) ("foo" + "bar")
+          func = ParamSet params Nothing ==> "foo" + "bar"
       it "should allow default arguments" $ do
         func @@ attrsE [("foo", 2)] `shouldEvalTo` intV 3
       it "should let the default arguments be overridden" $ do
@@ -129,7 +128,7 @@ lazyEvalSpec = describe "lazy evaluation" $ do
   let errE = "throw" @@ mkStr "oh no!"
   it "should not evaluate a function argument unless needed" $ do
     -- Make a function which ignores its argument (just returns "1").
-    let constFunc = "_" --> mkInt 1
+    let constFunc = "_" ==> mkInt 1
      -- The constant function should ignore an error argument.
     constFunc @@ errE `shouldEvalTo` intV 1
   it "should short-circuit logical AND" $ do
@@ -246,24 +245,24 @@ listSpec = describe "lists" $ do
     mkList [1, 2, 3] `shouldEvalTo` listV (map intV [1, 2, 3])
   describe "operations on lists" $ do
     it "should map a function over a list" $ property $ \list ->
-      "map" @@ ("x" --> "x") @@ fromAtoms list
+      "map" @@ ("x" ==> "x") @@ fromAtoms list
         `shouldEvalTo` fromAtoms list
     it "should map the +1 function over a list" $ property $ \nums -> do
-        "map" @@ ("x" --> "x" + 1) @@ (fromAtoms $ map NInt nums)
+        "map" @@ ("x" ==> "x" + 1) @@ (fromAtoms $ map NInt nums)
           `shouldEvalTo` fromAtoms (map (\i -> NInt (i + 1)) nums)
     it "should map over a nested list" $ property $ \nums1 nums2 -> do
       let list1 = fromAtoms $ map NInt nums1
           list2 = fromAtoms $ map NInt nums2
           list3 = mkList [list1, list2]
       -- The ID function over a nested list
-      "map" @@ ("x" --> "x") @@ list3
+      "map" @@ ("x" ==> "x") @@ list3
         `shouldEvalTo` listV (map (fromAtoms . map NInt) [nums1, nums2])
       -- Mapping the map function
-      "map" @@ ("map" @@ ("x" --> "x")) @@ list3
+      "map" @@ ("map" @@ ("x" ==> "x")) @@ list3
         `shouldEvalTo` listV [fromAtoms $ map NInt nums1,
                               fromAtoms $ map NInt nums2]
       -- Mapping functions which do things
-      "map" @@ ("map" @@ ("x" --> "x" * 2)) @@ list3
+      "map" @@ ("map" @@ ("x" ==> "x" * 2)) @@ list3
         `shouldEvalTo` listV [fromAtoms $ map (NInt . (*2)) nums1,
                               fromAtoms $ map (NInt . (*2)) nums2]
     describe "length" $ do
