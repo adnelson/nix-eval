@@ -125,8 +125,8 @@ listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Monad m => Params Expression -> Closure m -> Value m
-functionV params closure = VFunction params closure
+functionV :: Monad m => Params NExpr -> Closure' m -> Value m
+functionV params closure = VFunction' params closure
 
 -- | Wrap a native into a value.
 nativeV :: Monad m => Native m v -> Value m
@@ -224,8 +224,8 @@ emptyE :: Environment m
 emptyE = Environment mempty
 
 -- | An empty closure.
-emptyC :: Expression -> Closure m
-emptyC = Closure emptyE
+emptyC :: NExpr -> Closure' m
+emptyC = Closure' emptyE
 
 ------------------------------------------------------------------------------
 -- * Native Values -----------------------------------------------------------
