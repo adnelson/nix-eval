@@ -7,7 +7,7 @@ import Nix.Values.Generic
 import Nix.Values.Lazy
 import Nix.Values.NativeConversion
 import Nix.Evaluator.Contexts (WriteMessage(..))
-import Nix.Evaluator.Errors (EvalError(NotImplemented))
+import Nix.Evaluator.Errors (EvalError(..), FatalError(NotImplemented))
 import Nix.Evaluator.Builtins.Operators
 import Nix.Evaluator.Builtins.NativeFunctions
 import Nix.Evaluator.Evaluator (evaluate)
@@ -15,7 +15,7 @@ import Nix.Evaluator.Evaluator (evaluate)
 -- | Throws a 'NotImplemented' error with the given name. We should be
 -- able to get rid of this once the implementation is complete.
 notImplemented :: Monad m => Text -> LazyValue m
-notImplemented = throwError . NotImplemented
+notImplemented = throwError . FatalError . NotImplemented
 
 -- | The `builtins` object.
 builtins :: WriteMessage m => LAttrSet m

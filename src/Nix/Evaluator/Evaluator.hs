@@ -1,18 +1,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Nix.Evaluator.Evaluator where
 
-import Control.Monad.State.Strict (MonadState(..), modify, execStateT)
+import Control.Monad.State.Strict  --(MonadState(..), modify, execStateT)
 import Nix.Common
 import Nix.Constants
 import Nix.Expressions
 import Nix.Evaluator.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Evaluator.Errors
 import Nix.Expr (Params(..), ParamSet(..), NExpr, Antiquoted(..),
-                 NUnaryOp(..), NBinaryOp(..), NKeyName(..),
-                 NExprF(..), NAtom(..), NString(..), Binding(..))
+                 NUnaryOp(..), NBinaryOp(..), NKeyName(..), NExprF(..),
+                 NAtom(..), NString(..), Binding(..), mkSym)
 import Nix.Values
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
+import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 
 -- | Given a lazy value meant to contain a function, and a second lazy
@@ -145,28 +146,77 @@ evalKeyName env = \case
   DynamicKey antiquoted -> evalAntiquoted convertor env antiquoted
   where convertor = evalString env
 
+--attrPathsToSet :: Monad ctx =>
+--                  LEnvironment ctx ->
+--                  [(Text, [Text], NExpr)] ->
+--                  Eval ctx (LAttrSet ctx)
+--attrPathsToSet env = loop emptyE where
+--  loop set = \case
+--    [] -> pure set
+--    ((topKey, subKeys, expr):rest) -> do
+
+-- | Data type to represent the state of an attribute set as it's built.
+-- Values of this type are either actual lazy values ('Defined'), or they are
+-- records containing other 'InProgress' objects ('InProgress').
+-- This allows us to respond to this kind of syntax:
+-- @{a.x = 1; b = 2; a.y = 3;}@. We can represent this intermediately as
+-- @InProgress {a: InProgress {x: Defined 1, y: Defined 3}, b: Defined 2}@.
+-- The idea is that when building the set, we know if something is an error
+-- like a duplicate key if the key path results in a 'Defined'.
+data InProgress ctx
+  = Defined (LazyValue ctx)
+  | InProgress (Record (InProgress ctx))
+
+-- | Once it's finished, we can convert an 'InProgress' back into an
+-- a lazy value.
+convertIP :: Monad ctx => InProgress ctx -> LazyValue ctx
+convertIP (Defined v) = v
+convertIP (InProgress record) = do
+  let items = H.toList record
+      step aset (key, asip) = insertEnvL key (convertIP asip) aset
+  pure $ VAttrSet $ foldl' step emptyE items
+
+
+mkDot :: NExpr -> Text -> NExpr
+mkDot e key = Fix $ NSelect e [StaticKey key] Nothing
+
+insertKeyPath :: Monad ctx =>
+                 [Text] ->
+                 LazyValue ctx ->
+                 InProgress ctx ->
+                 Eval ctx (InProgress ctx)
+insertKeyPath kpath lval inProg = loop kpath inProg where
+  loop [] _ = pure $ Defined lval
+  loop _ (Defined _) = throwError $ DuplicateKeyPath kpath
+  loop (key:keys) (InProgress record) = do
+    next <- loop keys $ H.lookupDefault (InProgress mempty) key record
+    pure $ InProgress $ H.insert key next record
+
 -- | Convert a list of bindings to an attribute set.
 bindingsToSet :: Monad ctx =>
                  LEnvironment ctx ->
                  [Binding NExpr] ->
-                 Eval ctx (LAttrSet ctx)
-bindingsToSet env bindings = flip execStateT emptyE $ do
-  forM_ bindings $ \case
-    NamedVar [] _ -> return ()
-    -- A single key assigned to a single value.
-    NamedVar [keyExpr] expr -> do
-      -- Evaluate the key name expression to get the key as text.
-      key <- lift $ evalKeyName env keyExpr
-      -- Look the key up in the attribute set we're building.
-      lookupEnv key <$> get >>= \case
-        -- If it's not already in the env, add it.
-        Nothing -> modify $ insertEnvL key $ evalHnix env expr
-        -- Otherwise, this is an error.
-        Just _ -> throwError $ DuplicateKey key
-    NamedVar (key:keys) expr -> undefined
-    Inherit Nothing keypaths -> undefined
-    Inherit (Just expr) keypaths -> undefined
-
+                 LazyValue ctx
+bindingsToSet env bindings = do
+  let start = InProgress mempty
+  finish <- flip execStateT start $ forM_ bindings $ \case
+    NamedVar keys expr -> do
+      let lval = evalHnix env expr
+      -- Convert the key expressions to a list of text.
+      keyPath <- lift $ mapM (evalKeyName env) keys
+      -- Insert the key into the in-progress set.
+      get >>= lift . insertKeyPath keyPath lval >>= put
+    Inherit maybeExpr keyNames -> forM_ keyNames $ \keyName -> do
+      -- Evaluate the keyName to a string.
+      varName <- lift $ evalKeyName env keyName
+      -- Create the lazy value.
+      let lval = evalHnix env $ case maybeExpr of
+            Nothing -> mkSym varName
+            Just expr -> mkDot expr varName
+      -- Insert the keyname into the state.
+      get >>= lift . insertKeyPath [varName] lval >>= put
+  -- Convert the finished in-progress object into a LazyValue.
+  convertIP finish
 
 evalHnix :: Monad m =>
             LEnvironment m ->

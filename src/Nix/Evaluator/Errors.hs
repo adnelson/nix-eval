@@ -6,6 +6,16 @@ import Nix.Values.Generic
 import Nix.Evaluator.RuntimeTypes
 import qualified Data.Set as S
 
+-- | Errors which cannot be recovered from. Basically if these errors are
+-- triggered then we messed up.
+data FatalError
+  = NotImplemented Text
+  -- ^ For native functions we haven't implemented yet.
+  | EmptyKeyPath
+  -- ^ If we were to encounter an empty key path when inserting into
+  -- an attribute set.
+  deriving (Show, Eq, Typeable, Generic)
+
 -- | The type of errors which can occur during evaluation.
 data EvalError
   = NameError Text (Set Text)
@@ -33,10 +43,10 @@ data EvalError
   -- ^ When not enough arguments are passed to a function.
   | ExtraArguments [Text]
   -- ^ When too many arguments are passed to a function.
-  | DuplicateKey Text
-  -- ^ Raised when the same key is assigned twice in an attribute set.
-  | NotImplemented Text
-  -- ^ For native functions we haven't implemented yet.
+  | DuplicateKeyPath [Text]
+  -- ^ Raised when the same key path is assigned twice in an attribute set.
+  | FatalError FatalError
+  -- ^ If we mess up in some way.
   deriving (Show, Eq, Typeable, Generic)
 
 -- | Things that have runtime types. Those types are discovered
