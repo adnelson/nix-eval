@@ -210,7 +210,6 @@ paramList :: ParamSet e -> [(Text, Maybe e)]
 paramList (FixedParamSet params) = M.toList params
 paramList (VariadicParamSet params) = M.toList params
 
-
 evalHnix :: Monad m =>
             LEnvironment m ->
             NExpr ->
@@ -226,6 +225,18 @@ evalHnix env (Fix expr) = do
     NApp func arg -> recur func `evalApply` recur arg
     NAbs param body -> pure $ VFunction' param $ Closure' env body
     NSet bindings -> bindingsToSet env bindings
+    NStr string -> VString <$> evalString env string
+    NSelect expr' attrPath maybeDefault -> go attrPath $ recur expr' where
+      go [] lval = lval
+      go (keyName:keyNames) lval = lval >>= \case
+        VAttrSet attrs -> do
+          key <- evalKeyName env keyName
+          case lookupEnv key attrs of
+            Just lval' -> go keyNames lval'
+            Nothing -> case maybeDefault of
+              Just def -> recur def
+              Nothing -> throwError $ KeyError key $ envKeySet attrs
+        v -> expectedAttrs v
     NUnary op innerExpr -> do
       -- Translate the operator into a native function.
       let func = interpretUnop op
