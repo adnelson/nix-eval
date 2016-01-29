@@ -7,8 +7,7 @@ import Nix.Common
 import Nix.Atoms
 import Nix.Values hiding (WHNFValue, LazyValue)
 import Nix.Spec.Lib as Lib
-import Nix.Evaluator (Expression, builtin_throw, builtin_seq, binop_div,
-                      EvalError(..))
+import Nix.Evaluator (builtin_throw, builtin_seq, binop_div, EvalError(..))
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
 import qualified Data.Set as S

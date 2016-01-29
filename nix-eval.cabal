@@ -26,14 +26,12 @@ library
                      , Nix.Evaluator.Builtins.TopLevel
                      , Nix.Evaluator.Builtins.NativeFunctions
                      , Nix.Evaluator.Contexts
-                     , Nix.Constants
                      , Nix.Common
                      , Nix.Values
                      , Nix.Values.Generic
                      , Nix.Values.Lazy
                      , Nix.Values.NativeConversion
                      , Nix.Values.Strict
-                     , Nix.Expressions
   build-depends:       base >=4.8 && <5
                      , classy-prelude
                      , containers

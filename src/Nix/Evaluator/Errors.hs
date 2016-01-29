@@ -67,7 +67,6 @@ instance (MonadError EvalError m) => HasRTType (Value m) m where
   typeOf (VAttrSet _) = pure RT_Set
   typeOf (VList _) = pure RT_List
   typeOf (VFunction _ _) = pure RT_Lambda
-  typeOf (VFunction' _ _) = pure RT_Lambda
   typeOf (VNative (NativeValue v)) = typeOf v
   typeOf (VNative (NativeFunction _)) = pure RT_Lambda
 

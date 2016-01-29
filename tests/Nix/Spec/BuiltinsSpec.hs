@@ -25,7 +25,7 @@ spec = do
   omapM_ describeTopLevel topLevelKeys
   omapM_ describeBuiltinKey keysInBuiltins
 
-bi :: Text -> Expression
+bi :: Text -> NExpr
 bi key = "builtins" !. key
 
 valueToEnvStringSpec :: Spec

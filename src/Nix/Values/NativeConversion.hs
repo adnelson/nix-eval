@@ -1,7 +1,6 @@
 module Nix.Values.NativeConversion where
 
 import Nix.Common
-import Nix.Constants
 import Nix.Values.Generic
 import Nix.Values.Lazy
 

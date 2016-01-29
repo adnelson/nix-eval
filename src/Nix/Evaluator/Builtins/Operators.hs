@@ -3,7 +3,6 @@ module Nix.Evaluator.Builtins.Operators where
 import Nix.Common
 import Nix.Atoms
 import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
-import Nix.Expressions
 import Nix.Evaluator.Errors
 import Nix.Evaluator.RuntimeTypes
 import Nix.Values

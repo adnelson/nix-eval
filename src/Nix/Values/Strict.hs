@@ -1,9 +1,7 @@
 module Nix.Values.Strict where
 
 import Nix.Common
-import Nix.Expressions
 import Nix.Evaluator.Errors
-import Nix.Constants
 import Nix.Values.Generic
 import Nix.Values.Lazy
 
@@ -30,7 +28,6 @@ strictToLazy = \case
   VAttrSet attrs -> VAttrSet $ transE attrs
   VList vals -> VList $ map trans vals
   VFunction p (Closure env e) -> VFunction p (Closure (transE env) e)
-  VFunction' p (Closure' env e) -> VFunction' p (Closure' (transE env) e)
   VNative (NativeValue v) -> VNative $ NativeValue $ trans v
   VNative (NativeFunction _) -> error "Can't convert native functions"
   where trans (Identity s) = return $ strictToLazy s
@@ -51,9 +48,6 @@ whnfToStrict val = case val of
   VFunction param (Closure env body) -> do
     sEnv <- lazyEnvToStrictEnv env
     return $ VFunction param (Closure sEnv body)
-  VFunction' param (Closure' env body) -> do
-    sEnv <- lazyEnvToStrictEnv env
-    return $ VFunction' param (Closure' sEnv body)
   VNative (NativeValue nval) -> whnfToStrict =<< nval
   VNative (NativeFunction _) -> do
     throwError $ CustomError "Can't make a native function strict"

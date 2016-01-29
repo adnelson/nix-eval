@@ -5,7 +5,6 @@
 module Nix.Values.Generic where
 
 import Nix.Common
-import Nix.Expressions
 import Nix.Atoms
 import Nix.Expr (NExpr, Params)
 import qualified Data.HashMap.Strict as H
@@ -30,9 +29,8 @@ data Value m
   -- ^ Attribute set values.
   | VList (Seq (m (Value m)))
   -- ^ List values.
-  | VFunction (Params Expression) (Closure m)
+  | VFunction (Params NExpr) (Closure m)
   -- ^ Functions, with parameters and a closure.
-  | VFunction' (Params NExpr) (Closure' m)
   | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
 
@@ -43,8 +41,6 @@ instance Extract m => Show (Value m) where
   show (VList vs) = show $ map extract vs
   show (VFunction params closure) = concat [ show params, " => ("
                                            , show closure, ")"]
-  show (VFunction' params closure) = concat [ show params, " => ("
-                                            , show closure, ")"]
   show (VNative (NativeValue v)) = show $ extract v
   show (VNative _) = "(native function)"
 
@@ -54,7 +50,6 @@ instance Extract m => Eq (Value m) where
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = map extract vs == map extract vs'
   VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
-  VFunction' p1 e1 == VFunction' p2 e2 = p1 == p2 && e1 == e2
   VNative (NativeValue v) == VNative (NativeValue v') =
     extract v == extract v'
   _ == _ = False
@@ -71,7 +66,6 @@ instance Extract m => Ord (Value m) where
   VAttrSet _ <= _ = True
   -- VFunction p1 e1 <= VFunction p2 e2 = p1 <= p2 && e1 <= e2
   VFunction _ _ <= _ = True
-  VFunction' _ _ <= _ = True
   VNative (NativeValue v) <= VNative (NativeValue v') = extract v <= extract v'
   VNative _ <= _ = True
 
@@ -102,7 +96,7 @@ mkEnvL :: Monad m => [(Text, m (Value m))] -> Environment m
 mkEnvL = Environment . H.fromList
 
 -- | Shorthand to create a closure from a list and an expression.
-mkClosure :: Monad m => [(Text, Value m)] -> Expression -> Closure m
+mkClosure :: Monad m => [(Text, Value m)] -> NExpr -> Closure m
 mkClosure env expr = Closure (mkEnv env) expr
 
 -- | Create a value from a string.
@@ -130,8 +124,8 @@ listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Monad m => Params NExpr -> Closure' m -> Value m
-functionV params closure = VFunction' params closure
+functionV :: Monad m => Params NExpr -> Closure m -> Value m
+functionV params closure = VFunction params closure
 
 -- | Wrap a native into a value.
 nativeV :: Monad m => Native m v -> Value m
@@ -168,10 +162,7 @@ instance Extract ctx => Ord (Environment ctx) where
 type AttrSet = Environment
 
 -- | A closure is an unevaluated expression, with just an environment.
-data Closure m = Closure (Environment m) Expression
-  deriving (Eq, Generic)
-
-data Closure' m = Closure' (Environment m) NExpr
+data Closure m = Closure (Environment m) NExpr
   deriving (Eq, Generic)
 
 -- | TODO: make a proper ord instance...
@@ -180,9 +171,6 @@ instance Extract m => Ord (Closure m) where
 
 instance Extract m => Show (Closure m) where
   show (Closure env body) = "with " <> show env <> "; " <> show body
-
-instance Extract m => Show (Closure' m) where
-  show (Closure' env body) = "with " <> show env <> "; " <> show body
 
 -- | Get the size of an environment.
 envSize :: Environment m -> Int
@@ -229,8 +217,8 @@ emptyE :: Environment m
 emptyE = Environment mempty
 
 -- | An empty closure.
-emptyC :: NExpr -> Closure' m
-emptyC = Closure' emptyE
+emptyC :: NExpr -> Closure m
+emptyC = Closure emptyE
 
 ------------------------------------------------------------------------------
 -- * Native Values -----------------------------------------------------------

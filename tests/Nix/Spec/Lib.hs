@@ -41,7 +41,7 @@ instance Arbitrary NAtom where
 
 -- | We'll make arbitrary expressions but only containing constants,
 -- so that we don't get nameerrors and the like.
-instance Arbitrary Expression where
+instance Arbitrary NExpr where
   arbitrary = oneof
     [ Fix . NConstant <$> arbitrary ]
 
@@ -50,14 +50,14 @@ instance Monad m => Arbitrary (Value m) where
     [ VConstant <$> arbitrary
     , VAttrSet <$> arbitrary
     , VList <$> map (map return) arbitrary
-    , VFunction' <$> (Param <$> arbitrary) <*> arbitrary
+    , VFunction <$> (Param <$> arbitrary) <*> arbitrary
     , VNative . NativeValue . return <$> arbitrary ]
 
 instance Monad m => Arbitrary (Environment m) where
   arbitrary = Environment <$> map (map return) arbitrary
 
-instance Monad m => Arbitrary (Closure' m) where
-  arbitrary = Closure' <$> arbitrary <*> arbitrary
+instance Monad m => Arbitrary (Closure m) where
+  arbitrary = Closure <$> arbitrary <*> arbitrary
 
 instance Monad m => Arbitrary (Native m (Value m)) where
   arbitrary = NativeValue <$> map return arbitrary
@@ -76,11 +76,11 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ pure <$> enumFrom RT_Null
 
-instance IsString Expression where
+instance IsString NExpr where
   fromString = mkSym . fromString
 
--- | Expressions can be parsed from numbers.
-instance Num Expression where
+-- | NExprs can be parsed from numbers.
+instance Num NExpr where
   fromInteger = mkInt
   e1@(Fix (NList _)) + e2 = mkBinop NConcat e1 e2
   e1 + e2 = mkBinop NPlus e1 e2
@@ -90,7 +90,7 @@ instance Num Expression where
   abs = error "No absolute value for Nix expressions"
   signum = error "No sign for Nix expressions"
 
-instance FromAtom Expression where
+instance FromAtom NExpr where
   fromAtom = Fix . NConstant
   fromAtoms = mkList . map fromAtom
   fromAtomSet = attrsE . map (map fromAtom) . H.toList
@@ -156,18 +156,18 @@ runStrictL1 = map fst . runStrictL
 runStrictL2 :: LazyValue -> IO MockState
 runStrictL2 = map snd . runStrictL
 
-evalStrict :: Expression -> IO (Either EvalError StrictValue, MockState)
+evalStrict :: NExpr -> IO (Either EvalError StrictValue, MockState)
 evalStrict = runMock . lazyToStrict . performEval
 
-evalStrict1 :: Expression -> IO (Either EvalError StrictValue)
+evalStrict1 :: NExpr -> IO (Either EvalError StrictValue)
 evalStrict1 = map fst . evalStrict
 
-evalStrict2 :: Expression -> IO MockState
+evalStrict2 :: NExpr -> IO MockState
 evalStrict2 = map snd . evalStrict
 
-evalStrictWithEnv :: LEnvironment -> Expression ->
+evalStrictWithEnv :: LEnvironment -> NExpr ->
                     IO (Either EvalError StrictValue, MockState)
-evalStrictWithEnv env expr = runMock $ lazyToStrict $ evalHnix env expr
+evalStrictWithEnv env expr = runMock $ lazyToStrict $ evalNExpr env expr
 
 runNativeStrict :: LNative WHNFValue ->
                    IO (Either EvalError StrictValue, MockState)
@@ -190,14 +190,14 @@ runNativeStrictL1 = map fst . runNativeStrictL
 runNativeStrictL2 :: Eval TestM (LNative WHNFValue) -> IO MockState
 runNativeStrictL2 = map snd . runNativeStrictL
 
-shouldEvalTo :: Expression -> StrictValue -> Expectation
+shouldEvalTo :: NExpr -> StrictValue -> Expectation
 shouldEvalTo expr val = do
   result <- runMock1 $ lazyToStrict $ performEval expr
   result `shouldBe` pure val
 
-shouldEvalToWithEnv :: LEnvironment -> Expression -> StrictValue -> Expectation
+shouldEvalToWithEnv :: LEnvironment -> NExpr -> StrictValue -> Expectation
 shouldEvalToWithEnv env expr val = do
-  result <- runMock1 $ lazyToStrict $ evalHnix env expr
+  result <- runMock1 $ lazyToStrict $ evalNExpr env expr
   result `shouldBe` pure val
 
 shouldBeError :: LazyValue -> Expectation
@@ -222,11 +222,11 @@ shouldBeErrorWith action strings = do
     _ -> False
 
 -- | An expression that will always fail to evaluate.
-failingExpression :: Expression
+failingExpression :: NExpr
 failingExpression = "throw" @@ mkStr "failed on purpose"
 
 -- | An expression that will always succeed evaluation.
-succeedingExpression :: Expression
+succeedingExpression :: NExpr
 succeedingExpression = mkStr "success"
 
 shouldBeValid :: Show a => Eval TestM a -> Expectation
@@ -236,25 +236,25 @@ shouldBeValid action = do
     Left _ -> False
     _ -> True
 
-shouldErrorWithEnv :: LEnvironment -> Expression -> [String] -> Expectation
+shouldErrorWithEnv :: LEnvironment -> NExpr -> [String] -> Expectation
 shouldErrorWithEnv env expr strings = do
-  res <- runMock1 $ lazyToStrict $ evalHnix env expr
+  res <- runMock1 $ lazyToStrict $ evalNExpr env expr
   res `shouldSatisfy` \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
 
-shouldEval :: Expression -> Expectation
+shouldEval :: NExpr -> Expectation
 shouldEval expr = shouldBeValid $ lazyToStrict $ performEval expr
 
-shouldEvalWithEnv :: LEnvironment -> Expression -> Expectation
-shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evalHnix env expr
+shouldEvalWithEnv :: LEnvironment -> NExpr -> Expectation
+shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evalNExpr env expr
 
 infixl 0 `shouldEvalTo`
 
-shouldError :: Expression -> Expectation
+shouldError :: NExpr -> Expectation
 shouldError expr = shouldBeError $ performEval expr
 
-shouldErrorWith :: Expression -> [String] -> Expectation
+shouldErrorWith :: NExpr -> [String] -> Expectation
 shouldErrorWith = shouldErrorWithEnv topLevelBuiltins
 
 infixl 0 `shouldErrorWith`

@@ -2,7 +2,6 @@ module Nix.Evaluator.Builtins.TopLevel where
 
 import Nix.Common
 import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
-import Nix.Expressions
 import Nix.Values.Generic
 import Nix.Values.Lazy
 import Nix.Values.NativeConversion
@@ -10,7 +9,6 @@ import Nix.Evaluator.Contexts (WriteMessage(..))
 import Nix.Evaluator.Errors (EvalError(..), FatalError(NotImplemented))
 import Nix.Evaluator.Builtins.Operators
 import Nix.Evaluator.Builtins.NativeFunctions
-import Nix.Evaluator.Evaluator (evaluate)
 
 -- | Throws a 'NotImplemented' error with the given name. We should be
 -- able to get rid of this once the implementation is complete.

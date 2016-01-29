@@ -3,8 +3,6 @@ module Nix.Evaluator.Evaluator where
 
 import Control.Monad.State.Strict  --(MonadState(..), modify, execStateT)
 import Nix.Common
---import Nix.Constants
-import Nix.Expressions
 import Nix.Evaluator.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Evaluator.Errors
 import Nix.Atoms
@@ -22,10 +20,10 @@ import qualified Data.Set as S
 evalApply :: Monad m => LazyValue m -> LazyValue m -> LazyValue m
 evalApply func arg = func >>= \case
   VNative (NativeFunction f) -> unwrapNative =<< f arg
-  VFunction' params (Closure' cEnv body) -> case params of
+  VFunction params (Closure cEnv body) -> case params of
     Param param -> do
       let env' = insertEnvL param arg cEnv
-      evalHnix env' body
+      evalNExpr env' body
     ParamSet params mname -> arg >>= \case
       -- We need the argument to be an attribute set to unpack arguments.
       VAttrSet argSet -> do
@@ -43,7 +41,7 @@ evalApply func arg = func >>= \case
                 Nothing -> case mdef of
                   -- Evaluate the default expression and insert it.
                   Just def -> do
-                    (insertEnvL key (evalHnix callingEnv def) newEnv,
+                    (insertEnvL key (evalNExpr callingEnv def) newEnv,
                      missingArgs)
                   -- Otherwise record it as an error.
                   Nothing -> (newEnv, key : missingArgs)
@@ -57,7 +55,7 @@ evalApply func arg = func >>= \case
         case missing of
           _:_ -> throwError $ MissingArguments missing
           _ -> case params of
-            VariadicParamSet _ -> evalHnix callingEnv body
+            VariadicParamSet _ -> evalNExpr callingEnv body
             -- We need to make sure there aren't any extra arguments.
             FixedParamSet ps -> do
               let keyList :: [Text] = envKeyList argSet
@@ -67,55 +65,7 @@ evalApply func arg = func >>= \case
                     Nothing -> (key:extraKeys)
                     Just _ -> extraKeys
               case foldl' getExtra [] keyList of
-                [] -> evalHnix callingEnv body
-                extras -> throwError $ ExtraArguments extras
-      v -> expectedAttrs v
-
-  VFunction params (Closure cEnv body) -> case params of
-    Param param -> do
-      let env' = insertEnvL param arg cEnv
-      evaluate env' body
-    ParamSet params mname -> arg >>= \case
-      -- We need the argument to be an attribute set to unpack arguments.
-      VAttrSet argSet -> do
-        let
-          -- The step function will construct a new env, and also find
-          -- any keys that are missing and don't have defaults.
-          -- Note that we have another recursive definition here,
-          -- since `step` refers to `callingEnv` and vice versa. This
-          -- means that we'll loop infinitely on circular variables.
-          step (newEnv, missingArgs) (key, mdef) =
-              case lookupEnv key argSet of
-                -- If the argument is provided, insert it.
-                Just val -> (insertEnvL key val newEnv, missingArgs)
-                -- If the argument is missing, see if there's a default.
-                Nothing -> case mdef of
-                  -- Evaluate the default expression and insert it.
-                  Just def -> (insertEnvL key (evaluate callingEnv def) newEnv,
-                               missingArgs)
-                  -- Otherwise record it as an error.
-                  Nothing -> (newEnv, key : missingArgs)
-          -- Fold through the parameters with the step function.
-          (callingEnv', missing) = foldl' step (cEnv, []) $ paramList params
-          -- If there's a variable attached to the param set, add it
-          -- to the calling environment.
-          callingEnv = case mname of
-            Nothing -> callingEnv'
-            Just name -> insertEnvL name arg callingEnv'
-        case missing of
-          _:_ -> throwError $ MissingArguments missing
-          _ -> case params of
-            VariadicParamSet _ -> evaluate callingEnv body
-            -- We need to make sure there aren't any extra arguments.
-            FixedParamSet ps -> do
-              let keyList :: [Text] = envKeyList argSet
-                  -- For each key, we'll check if it's in the params,
-                  -- and otherwise it's an `ExtraArguments` error.
-                  getExtra extraKeys key = case M.lookup key ps of
-                    Nothing -> (key:extraKeys)
-                    Just _ -> extraKeys
-              case foldl' getExtra [] keyList of
-                [] -> evaluate callingEnv body
+                [] -> evalNExpr callingEnv body
                 extras -> throwError $ ExtraArguments extras
       v -> expectedAttrs v
   v -> expectedFunction v
@@ -135,7 +85,7 @@ evalAntiquoted :: Monad ctx =>
                   Eval ctx Text
 evalAntiquoted convertor env = \case
   Plain string -> convertor string
-  Antiquoted expr -> evalHnix env expr >>= \case
+  Antiquoted expr -> evalNExpr env expr >>= \case
     VString str -> pure str
     v -> expectedString v
 
@@ -192,13 +142,13 @@ bindingsToSet env bindings = do
       -- Convert the key expressions to a list of text.
       keyPath <- lift $ mapM (evalKeyName env) keys
       -- Insert the key into the in-progress set.
-      let lval = evalHnix env expr
+      let lval = evalNExpr env expr
       get >>= lift . insertKeyPath keyPath lval >>= put
     Inherit maybeExpr keyNames -> forM_ keyNames $ \keyName -> do
       -- Evaluate the keyName to a string.
       varName <- lift $ evalKeyName env keyName
       -- Create the lazy value.
-      let lval = evalHnix env $ case maybeExpr of
+      let lval = evalNExpr env $ case maybeExpr of
             Nothing -> mkSym varName
             Just expr -> mkDot expr varName
       -- Insert the keyname into the state.
@@ -210,12 +160,12 @@ paramList :: ParamSet e -> [(Text, Maybe e)]
 paramList (FixedParamSet params) = M.toList params
 paramList (VariadicParamSet params) = M.toList params
 
-evalHnix :: Monad m =>
+evalNExpr :: Monad m =>
             LEnvironment m ->
             NExpr ->
             LazyValue m
-evalHnix env (Fix expr) = do
-  let recur = evalHnix env
+evalNExpr env (Fix expr) = do
+  let recur = evalNExpr env
   case expr of
     NConstant atom -> pure $ VConstant atom
     NSym name -> case lookupEnv name env of
@@ -223,7 +173,7 @@ evalHnix env (Fix expr) = do
       Just val -> val
     NList exprs -> pure $ VList $ fromList $ map recur exprs
     NApp func arg -> recur func `evalApply` recur arg
-    NAbs param body -> pure $ VFunction' param $ Closure' env body
+    NAbs param body -> pure $ VFunction param $ Closure env body
     NSet bindings -> bindingsToSet env bindings
     NStr string -> VString <$> evalString env string
     NSelect expr' attrPath maybeDefault -> go attrPath $ recur expr' where
@@ -248,47 +198,3 @@ evalHnix env (Fix expr) = do
       -- Apply the function to the two arguments and unwrap the result.
       unwrapNative =<< applyNative2 func (recur left) (recur right)
     _ -> error $ "We don't handle " <> show expr <> " yet"
-
--- | Evaluate an expression within an environment.
-evaluate :: Monad m =>
-            LEnvironment m -> -- ^ Enclosing environment.
-            Expression     -> -- ^ Expression to evaluate.
-            LazyValue m       -- ^ Result of evaluation.
-evaluate env expr = case expr of
-  EConstant _ -> undefined
-  EVar name -> case lookupEnv name env of
-    Nothing -> throwError $ NameError name (envKeySet env)
-    Just val -> val
-  ELambda param body -> pure $ VFunction param $ Closure env body
-  EBinaryOp left op right -> do
-    -- Turn the operator into a binary native function.
-    let func = interpretBinop op
-    -- Apply the function to the two arguments and unwrap the result.
-    unwrapNative =<< (applyNative2 func (evaluate env left)
-                                        (evaluate env right))
-  EUnaryOp op innerExpr -> do
-    -- Translate the operator into a native function.
-    let func = interpretUnop op
-    -- Apply the function to the inner expression.
-    unwrapNative =<< applyNative func (evaluate env innerExpr)
-  EApply func arg -> evaluate env func `evalApply` evaluate env arg
-  EList exprs -> pure $ VList $ map (evaluate env) exprs
-  ENonRecursiveAttrs attrs -> do
-    pure $ VAttrSet $ Environment $ map (evaluate env) attrs
-  ERecursiveAttrs attrs -> pure $ VAttrSet newEnv where
-    -- Create a new environment by evaluating the values of the set.
-    -- Each should be evaluated in an environment which includes the
-    -- variables being evaluated; thus it is a self-referential
-    -- definition. Unfortunately this means that (as currently
-    -- formulated) we cannot detect infinite recursion.
-    newEnv = Environment $ map (evaluate (newEnv `unionEnv` env)) attrs
-  EAttrReference attrs key -> evaluate env attrs >>= \case
-    VAttrSet set -> case lookupEnv key set of
-      Nothing -> throwError $ KeyError key (envKeySet set)
-      Just res -> res
-    val -> expectedAttrs val
-  EWith attrs expr -> evaluate env attrs >>= \case
-    -- The expression must be an attribute set; bring into scope to
-    -- evaluate the inner expression.
-    VAttrSet set -> evaluate (set `unionEnv` env) expr
-    val -> expectedAttrs val

@@ -3,8 +3,6 @@ module Nix.Evaluator.Builtins.NativeFunctions where
 import Nix.Common
 import Nix.Atoms
 import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
---import Nix.Constants
-import Nix.Expressions
 import Nix.Evaluator.Contexts (WriteMessage(..))
 import Nix.Evaluator.Evaluator (evalApply)
 import Nix.Evaluator.Errors
