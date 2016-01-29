@@ -223,7 +223,7 @@ shouldBeErrorWith action strings = do
 
 -- | An expression that will always fail to evaluate.
 failingExpression :: Expression
-failingExpression = "builtins" !. "throw" @@ mkStr "failed on purpose"
+failingExpression = "throw" @@ mkStr "failed on purpose"
 
 -- | An expression that will always succeed evaluation.
 succeedingExpression :: Expression

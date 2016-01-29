@@ -30,6 +30,7 @@ strictToLazy = \case
   VAttrSet attrs -> VAttrSet $ transE attrs
   VList vals -> VList $ map trans vals
   VFunction p (Closure env e) -> VFunction p (Closure (transE env) e)
+  VFunction' p (Closure' env e) -> VFunction' p (Closure' (transE env) e)
   VNative (NativeValue v) -> VNative $ NativeValue $ trans v
   VNative (NativeFunction _) -> error "Can't convert native functions"
   where trans (Identity s) = return $ strictToLazy s
@@ -42,6 +43,7 @@ strictToLazy = \case
 whnfToStrict :: Monad m => WHNFValue m -> Eval m StrictValue
 whnfToStrict val = case val of
   VConstant c -> pure $ VConstant c
+  VString s -> pure $ VString s
   VAttrSet attrs -> VAttrSet <$> lazyEnvToStrictEnv attrs
   VList lvals -> VList <$> do
     strictVals <- mapM lazyToStrict lvals
@@ -49,6 +51,9 @@ whnfToStrict val = case val of
   VFunction param (Closure env body) -> do
     sEnv <- lazyEnvToStrictEnv env
     return $ VFunction param (Closure sEnv body)
+  VFunction' param (Closure' env body) -> do
+    sEnv <- lazyEnvToStrictEnv env
+    return $ VFunction' param (Closure' sEnv body)
   VNative (NativeValue nval) -> whnfToStrict =<< nval
   VNative (NativeFunction _) -> do
     throwError $ CustomError "Can't make a native function strict"

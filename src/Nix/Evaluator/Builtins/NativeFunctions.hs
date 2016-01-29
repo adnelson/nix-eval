@@ -21,6 +21,7 @@ import qualified Data.HashMap.Strict as H
 valueToEnvString :: Monad ctx => WHNFValue ctx -> Eval ctx Text
 valueToEnvString val = case val of
   VConstant c -> pure $ atomToEnvString c
+  VString s -> pure s
   VList vals -> do
     strings <- forM vals $ \lazyVal -> do
       val <- lazyVal

@@ -38,7 +38,7 @@ data Value m
 
 instance Extract m => Show (Value m) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
-  show (VString text) = show text
+  show (VString text) = "VString " <> show text
   show (VAttrSet set) = show set
   show (VList vs) = show $ map extract vs
   show (VFunction params closure) = concat [ show params, " => ("
@@ -50,9 +50,11 @@ instance Extract m => Show (Value m) where
 
 instance Extract m => Eq (Value m) where
   VConstant c == VConstant c' = c == c'
+  VString s == VString s' = s == s'
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = map extract vs == map extract vs'
   VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
+  VFunction' p1 e1 == VFunction' p2 e2 = p1 == p2 && e1 == e2
   VNative (NativeValue v) == VNative (NativeValue v') =
     extract v == extract v'
   _ == _ = False
@@ -61,12 +63,15 @@ instance Extract m => Eq (Value m) where
 instance Extract m => Ord (Value m) where
   VConstant c1 <= VConstant c2 = c1 <= c2
   VConstant _ <= _ = True
+  VString s1 <= VString s2 = s1 <= s2
+  VString _ <= _ = True
   VList l1 <= VList l2 = map extract l1 <= map extract l2
   VList _ <= _ = True
   VAttrSet a1 <= VAttrSet a2 = a1 <= a2
   VAttrSet _ <= _ = True
   -- VFunction p1 e1 <= VFunction p2 e2 = p1 <= p2 && e1 <= e2
   VFunction _ _ <= _ = True
+  VFunction' _ _ <= _ = True
   VNative (NativeValue v) <= VNative (NativeValue v') = extract v <= extract v'
   VNative _ <= _ = True
 
