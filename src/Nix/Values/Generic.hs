@@ -5,34 +5,38 @@
 module Nix.Values.Generic where
 
 import Nix.Common
-import Nix.Expressions
-import Nix.Constants
+import Nix.Atoms
+import Nix.Expr (NExpr, Params)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Map as M
 
--------------------------------------------------------------------------------
--- Values ---------------------------------------------------------------------
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- * Values ------------------------------------------------------------------
+------------------------------------------------------------------------------
 
 -- | The type of runtime values. Is polymorphic over the computation
 -- context type
 data Value m
-  = VConstant Constant
+  = VConstant NAtom
   -- ^ Constant values (isomorphic to constant expressions).
+  | VString Text
+  -- ^ Text in nix expressions isn't properly constant, since it can have
+  -- interpolated expressions. So strings are not part of constants.
   | VAttrSet (AttrSet m)
   -- ^ Attribute set values.
   | VList (Seq (m (Value m)))
   -- ^ List values.
-  | VFunction Params (Closure m)
+  | VFunction (Params NExpr) (Closure m)
   -- ^ Functions, with parameters and a closure.
   | forall v. VNative (Native m v)
   -- ^ Native values, which can be either values or functions.
 
 instance Extract m => Show (Value m) where
   show (VConstant c) = "VConstant (" <> show c <> ")"
+  show (VString text) = "VString " <> show text
   show (VAttrSet set) = show set
   show (VList vs) = show $ map extract vs
   show (VFunction params closure) = concat [ show params, " => ("
@@ -42,6 +46,7 @@ instance Extract m => Show (Value m) where
 
 instance Extract m => Eq (Value m) where
   VConstant c == VConstant c' = c == c'
+  VString s == VString s' = s == s'
   VAttrSet as == VAttrSet as' = as == as'
   VList vs == VList vs' = map extract vs == map extract vs'
   VFunction p1 e1 == VFunction p2 e2 = p1 == p2 && e1 == e2
@@ -53,6 +58,8 @@ instance Extract m => Eq (Value m) where
 instance Extract m => Ord (Value m) where
   VConstant c1 <= VConstant c2 = c1 <= c2
   VConstant _ <= _ = True
+  VString s1 <= VString s2 = s1 <= s2
+  VString _ <= _ = True
   VList l1 <= VList l2 = map extract l1 <= map extract l2
   VList _ <= _ = True
   VAttrSet a1 <= VAttrSet a2 = a1 <= a2
@@ -63,20 +70,23 @@ instance Extract m => Ord (Value m) where
   VNative _ <= _ = True
 
 instance IsString (Value m) where
-  fromString = VConstant . fromString
+  fromString = VString . fromString
 
-instance Monad m => FromConstant (Value m) where
-  fromConstant = VConstant
-  fromConstants = VList . fromList . map (return . fromConstant)
-  fromConstantSet set = VAttrSet $ Environment $
-    map (return . fromConstant) set
+instance Monad m => FromAtom (Value m) where
+  fromAtom = VConstant
+  fromAtoms = VList . fromList . map (return . fromAtom)
+  fromAtomSet set = VAttrSet $ Environment $
+    map (return . fromAtom) set
 
-instance Monad m => FromConstant (m (Value m)) where
-  fromConstant = return . fromConstant
-  fromConstants = return . fromConstants
-  fromConstantSet = return . fromConstantSet
+instance Monad m => FromAtom (m (Value m)) where
+  fromAtom = return . fromAtom
+  fromAtoms = return . fromAtoms
+  fromAtomSet = return . fromAtomSet
 
--- Convenience functions
+------------------------------------------------------------------------------
+-- * Convenience functions ---------------------------------------------------
+------------------------------------------------------------------------------
+
 -- | Shorthand for creating an Environment from a list.
 mkEnv :: Monad m => [(Text, Value m)] -> Environment m
 mkEnv = Environment . H.fromList . map (map pure)
@@ -86,24 +96,24 @@ mkEnvL :: Monad m => [(Text, m (Value m))] -> Environment m
 mkEnvL = Environment . H.fromList
 
 -- | Shorthand to create a closure from a list and an expression.
-mkClosure :: Monad m => [(Text, Value m)] -> Expression -> Closure m
+mkClosure :: Monad m => [(Text, Value m)] -> NExpr -> Closure m
 mkClosure env expr = Closure (mkEnv env) expr
 
 -- | Create a value from a string.
 strV :: Monad m => Text -> Value m
-strV = fromConstant . String
+strV = VString
 
 -- | Create a value from an integer.
 intV :: Monad m => Integer -> Value m
-intV = fromConstant . Int
+intV = convert
 
 -- | Create a value from a bool.
 boolV :: Monad m => Bool -> Value m
-boolV = fromConstant . Bool
+boolV = convert
 
 -- | Create a null value.
 nullV :: Monad m => Value m
-nullV = fromConstant Null
+nullV = VConstant NNull
 
 -- | Create an attribute set value.
 attrsV :: Monad m => [(Text, Value m)] -> Value m
@@ -114,7 +124,7 @@ listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Monad m => Params -> Closure m -> Value m
+functionV :: Monad m => Params NExpr -> Closure m -> Value m
 functionV params closure = VFunction params closure
 
 -- | Wrap a native into a value.
@@ -125,9 +135,9 @@ nativeV = VNative
 pNativeV :: Monad m => Native m v -> m (Value m)
 pNativeV = pure . nativeV
 
--------------------------------------------------------------------------------
--- Environments and Attribute Sets --------------------------------------------
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- * Environments and Attribute Sets -----------------------------------------
+------------------------------------------------------------------------------
 
 -- | An environment is conceptually just a name -> value mapping, but the
 -- element type is parametric to allow usage of different kinds of values.
@@ -152,7 +162,7 @@ instance Extract ctx => Ord (Environment ctx) where
 type AttrSet = Environment
 
 -- | A closure is an unevaluated expression, with just an environment.
-data Closure m = Closure (Environment m) Expression
+data Closure m = Closure (Environment m) NExpr
   deriving (Eq, Generic)
 
 -- | TODO: make a proper ord instance...
@@ -207,12 +217,12 @@ emptyE :: Environment m
 emptyE = Environment mempty
 
 -- | An empty closure.
-emptyC :: Expression -> Closure v
+emptyC :: NExpr -> Closure m
 emptyC = Closure emptyE
 
--------------------------------------------------------------------------------
--- Native Values --------------------------------------------------------------
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- * Native Values -----------------------------------------------------------
+------------------------------------------------------------------------------
 
 -- | An embedding of raw values. Lets us write functions in Haskell
 -- which operate on Nix values, and expose these in Nix code.
@@ -243,23 +253,3 @@ applyNative2 (NativeFunction func) x y = do
 unwrapNative :: Monad m => Native m v -> m (Value m)
 unwrapNative (NativeValue v) = v
 unwrapNative n = return $ VNative n
-
--------------------------------------------------------------------------------
--- * Abstract evaluation contexts
-------------------------------------------------------------------------------
--- Not every monad can act as an evaluation context for Nix
--- expressions. In particular, there are certain primitive
--- side-effects we must support, such as printing to screen for the
--- `trace` builtin, or reading the contents of a directory.
--- So we have a more specialized type class here, which is actually
--- made up of a few more specific type classes.
-
--- | This class doesn't express any of its own methods; rather it just
--- wraps several other type classes into one.
-class (WriteMessage m) => Nix m
-
--- | A monad in which we can print messages. This lets us implement
--- the `trace` builtin function.
-class Monad m => WriteMessage m where
-  -- | Write a message (e.g. to stdout)
-  writeMessage :: Text -> m ()

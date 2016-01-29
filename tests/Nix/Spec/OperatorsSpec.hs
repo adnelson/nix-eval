@@ -1,9 +1,10 @@
 module Nix.Spec.OperatorsSpec (main, spec) where
 
 import Nix.Common
-import Nix.Constants
+import Nix.Atoms
 import Nix.Eval
-import Nix.Expressions
+import Nix.Expr
+import Nix.Evaluator
 import Nix.Spec.Lib
 import Nix.Values
 import Nix.Values.NativeConversion
@@ -34,60 +35,60 @@ binopsSpec :: Spec
 binopsSpec = describe "binary operators" $ do
   describe "numerical stuff" $ do
     it "should evaluate +" $ property $ \i j ->
-      intE i $+ intE j `shouldEvalTo` intV (i + j)
+      mkInt i $+ mkInt j `shouldEvalTo` intV (i + j)
     it "should evaluate -" $ property $ \i j ->
-      intE i $- intE j `shouldEvalTo` intV (i - j)
+      mkInt i $- mkInt j `shouldEvalTo` intV (i - j)
     it "should evaluate *" $ property $ \i j ->
-      intE i $* intE j `shouldEvalTo` intV (i * j)
+      mkInt i $* mkInt j `shouldEvalTo` intV (i * j)
     describe "comparison" $ do
       it "should evaluate <" $ property $ \i j -> do
-        fromInteg i $< fromInteg j `shouldEvalTo` fromBool (i < j)
+        mkInt i $< mkInt j `shouldEvalTo` convert (i < j)
       it "should evaluate <=" $ property $ \i j -> do
-        fromInteg i $<= fromInteg j `shouldEvalTo` fromBool (i <= j)
+        mkInt i $<= mkInt j `shouldEvalTo` convert (i <= j)
       it "should evaluate >" $ property $ \i j -> do
-        fromInteg i $> fromInteg j `shouldEvalTo` fromBool (i > j)
+        mkInt i $> mkInt j `shouldEvalTo` convert (i > j)
       it "should evaluate >=" $ property $ \i j -> do
-        fromInteg i $>= fromInteg j `shouldEvalTo` fromBool (i >= j)
+        mkInt i $>= mkInt j `shouldEvalTo` convert (i >= j)
   describe "logic" $ do
     it "should evaluate &&" $ property $ \b1 b2 ->
-      boolE b1 $&& boolE b2 `shouldEvalTo` boolV (b1 && b2)
+      mkBool b1 $&& mkBool b2 `shouldEvalTo` boolV (b1 && b2)
     it "should evaluate ||" $ property $ \b1 b2 ->
-      boolE b1 $|| boolE b2 `shouldEvalTo` boolV (b1 || b2)
+      mkBool b1 $|| mkBool b2 `shouldEvalTo` boolV (b1 || b2)
     it "should evaluate ->" $ property $ \b1 b2 ->
-      boolE b1 $-> boolE b2 `shouldEvalTo`
+      mkBool b1 $-> mkBool b2 `shouldEvalTo`
         boolV (if b1 then b2 else True)
   describe "data structures" $ do
     it "should evaluate ++" $ property $ \list1 list2 -> do
-      fromConstants list1 $++ fromConstants list2
-        `shouldEvalTo` fromConstants (list1 <> list2)
+      fromAtoms list1 $++ fromAtoms list2
+        `shouldEvalTo` fromAtoms (list1 <> list2)
     it "should evaluate //" $ property $ \set1 set2 -> do
-      fromConstantSet set1 $// fromConstantSet set2
-      `shouldEvalTo` fromConstantSet (set2 <> set1)
+      fromAtomSet set1 $// fromAtomSet set2
+      `shouldEvalTo` fromAtomSet (set2 <> set1)
     it "should evaluate + for strings" $ property $ \s1 s2 -> do
-      strE s1 $+ strE s2 `shouldEvalTo` strV (s1 <> s2)
+      mkStr s1 $+ mkStr s2 `shouldEvalTo` strV (s1 <> s2)
   describe "equality" $ do
     it "equal things are equal" $ property $ \constant -> do
-      fromConstant constant $== fromConstant constant
-        `shouldEvalTo` fromBool True
+      fromAtom constant $== fromAtom constant
+        `shouldEvalTo` convert True
     it "equal things are not unequal" $ property $ \constant -> do
-      fromConstant constant $!= fromConstant constant
-        `shouldEvalTo` fromBool False
+      fromAtom constant $!= fromAtom constant
+        `shouldEvalTo` convert False
     it "unequal things are unequal" $ property $ \const1 const2 -> do
-      fromConstant const1 $== fromConstant const2
-        `shouldEvalTo` fromBool (const1 == const2)
+      fromAtom const1 $== fromAtom const2
+        `shouldEvalTo` convert (const1 == const2)
     it "unequal things are not equal" $ property $ \const1 const2 -> do
-      fromConstant const1 $!= fromConstant const2
-        `shouldEvalTo` fromBool (const1 /= const2)
+      fromAtom const1 $!= fromAtom const2
+        `shouldEvalTo` convert (const1 /= const2)
 
 unopsSpec :: Spec
 unopsSpec = describe "unary operators" $ do
   describe "numeric negation" $ do
     it "should work once" $ property $ \num -> do
-      -(fromInteg num) `shouldEvalTo` fromInteg (-num)
+      -(mkInt num) `shouldEvalTo` convert (-num)
     it "should work twice" $ property $ \num -> do
-      -(-(fromInteg num)) `shouldEvalTo` fromInteg num
+      -(-(mkInt num)) `shouldEvalTo` convert num
   describe "logical negation" $ do
     it "should work once" $ property $ \bool -> do
-      notE (fromBool bool) `shouldEvalTo` fromBool (not bool)
+      mkNot (mkBool bool) `shouldEvalTo` convert (not bool)
     it "should work twice" $ property $ \bool -> do
-      notE (notE (fromBool bool)) `shouldEvalTo` fromBool bool
+      mkNot (mkNot (mkBool bool)) `shouldEvalTo` convert bool

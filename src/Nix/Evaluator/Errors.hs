@@ -1,10 +1,20 @@
 -- | Describes errors that can be encountered during evaluation.
-module Nix.Eval.Errors where
+module Nix.Evaluator.Errors where
 
 import Nix.Common
 import Nix.Values.Generic
-import Nix.Eval.RuntimeTypes
+import Nix.Evaluator.RuntimeTypes
 import qualified Data.Set as S
+
+-- | Errors which cannot be recovered from. Basically if these errors are
+-- triggered then we messed up.
+data FatalError
+  = NotImplemented Text
+  -- ^ For native functions we haven't implemented yet.
+  | EmptyKeyPath
+  -- ^ If we were to encounter an empty key path when inserting into
+  -- an attribute set.
+  deriving (Show, Eq, Typeable, Generic)
 
 -- | The type of errors which can occur during evaluation.
 data EvalError
@@ -33,8 +43,10 @@ data EvalError
   -- ^ When not enough arguments are passed to a function.
   | ExtraArguments [Text]
   -- ^ When too many arguments are passed to a function.
-  | NotImplemented Text
-  -- ^ For native functions we haven't implemented yet.
+  | DuplicateKeyPath [Text]
+  -- ^ Raised when the same key path is assigned twice in an attribute set.
+  | FatalError FatalError
+  -- ^ If we mess up in some way.
   deriving (Show, Eq, Typeable, Generic)
 
 -- | Things that have runtime types. Those types are discovered
@@ -50,7 +62,8 @@ instance (MonadError EvalError m, HasRTType t m) => HasRTType (m t) m where
   typeOf res = res >>= typeOf
 
 instance (MonadError EvalError m) => HasRTType (Value m) m where
-  typeOf (VConstant constant) = pure $ typeOfConstant constant
+  typeOf (VConstant atom) = pure $ typeOfAtom atom
+  typeOf (VString _) = pure RT_String
   typeOf (VAttrSet _) = pure RT_Set
   typeOf (VList _) = pure RT_List
   typeOf (VFunction _ _) = pure RT_Lambda

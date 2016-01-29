@@ -1,34 +1,25 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-module Nix.Eval.Builtins.NativeFunctions where
+module Nix.Evaluator.Builtins.NativeFunctions where
 
 import Nix.Common
-import Nix.Types (NBinaryOp(..), NUnaryOp(..))
-import Nix.Constants
-import Nix.Expressions
-import Nix.Eval.Evaluator (evalApply)
-import Nix.Eval.Errors
-import Nix.Eval.RuntimeTypes
+import Nix.Atoms
+import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
+import Nix.Evaluator.Contexts (WriteMessage(..))
+import Nix.Evaluator.Evaluator (evalApply)
+import Nix.Evaluator.Errors
+import Nix.Evaluator.RuntimeTypes
 import Nix.Values
 import Nix.Values.NativeConversion
-import Nix.Eval.Builtins.Operators (binop_eq)
+import Nix.Evaluator.Builtins.Operators (binop_eq)
 
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 
--- | Conversion to environment variables for constants.
-constantToEnvString :: Constant -> Text
-constantToEnvString (String s) = s
-constantToEnvString (Int i) = tshow i
-constantToEnvString (Path p) = pathToText p
-constantToEnvString (Bool True) = "1"
-constantToEnvString (Bool False) = ""
-constantToEnvString Null = ""
-
 -- | Convert a value to a env-variable-compatible string.
-valueToEnvString :: Monad m => WHNFValue m -> Eval m Text
+valueToEnvString :: Monad ctx => WHNFValue ctx -> Eval ctx Text
 valueToEnvString val = case val of
-  VConstant c -> pure $ constantToEnvString c
+  VConstant c -> pure $ atomToEnvString c
+  VString s -> pure s
   VList vals -> do
     strings <- forM vals $ \lazyVal -> do
       val <- lazyVal
@@ -54,20 +45,20 @@ builtin_seq = \_ -> id
 -- | The throw function forces an error to occur.
 builtin_throw :: Monad m => WHNFValue m -> LazyValue m
 builtin_throw val = case val of
-  VConstant (String msg) -> throwError $ CustomError msg
+  VString msg -> throwError $ CustomError msg
   _ -> expectedString val
 
 -- | Asserts its first argument is true, and then returns its second.
 builtin_assert :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
 builtin_assert val res = case val of
-  VConstant (Bool True) -> res
-  VConstant (Bool False) -> throwError AssertionError
+  VConstant (NBool True) -> res
+  VConstant (NBool False) -> throwError AssertionError
   _ -> expectedBool val
 
 -- | Get the length of a list.
 builtin_length :: Monad m => WHNFValue m -> LazyValue m
 builtin_length val = case val of
-  VList vals -> pure $ fromInt (length vals)
+  VList vals -> pure $ convert (length vals)
   v -> expectedList v
 
 -- | Add to the front of a list.
@@ -80,8 +71,8 @@ builtin_cons val v = case v of
 builtin_elemAt :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_elemAt val1 val2 = case val1 of
   VList list -> case val2 of
-    VConstant (Int i) | i < 0 -> throwError $ IndexError i (length list)
-    VConstant (Int i) -> case list `index` fromIntegral i of
+    VConstant (NInt i) | i < 0 -> throwError $ IndexError i (length list)
+    VConstant (NInt i) -> case list `index` fromIntegral i of
       Nothing -> throwError $ IndexError i (length list)
       Just val -> val
     _ -> expectedInt val2
@@ -133,12 +124,12 @@ builtin_deepSeq val x = deeplyEval val >> x
 
 -- | Get the type of a value as a string.
 builtin_typeOf :: Monad m => WHNFValue m -> LazyValue m
-builtin_typeOf v = convert . typeToString <$> typeOf v
+builtin_typeOf v = VString . typeToString <$> typeOf v
 
 -- | Get the length of a nix string.
 builtin_stringLength :: Monad m => WHNFValue m -> LazyValue m
 builtin_stringLength = \case
-  VConstant (String s) -> convert (length s)
+  VString s -> convert (length s)
   v -> expectedString v
 
 -- | Get all of the keys from a set as a list of strings.
@@ -170,10 +161,10 @@ builtin_intersectAttrs = \case
 -- set. Returns whether that attribute is in the set.
 builtin_hasAttr :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_hasAttr attrName attrSet = case (attrName, attrSet) of
-  (VConstant (String name), VAttrSet aset) -> case lookupEnv name aset of
+  (VString name, VAttrSet aset) -> case lookupEnv name aset of
     Nothing -> convert False
     Just _ -> convert True
-  (VConstant (String _), _) -> expectedString attrName
+  (VString _, _) -> expectedString attrName
   _ -> expectedAttrs attrSet
 
 -- | First argument is an attribute set, second is a list of strings.
@@ -183,7 +174,7 @@ builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
   (VAttrSet set, VList names) -> go set $ toList names where
      go res [] = pure $ VAttrSet res
      go res (lval:lvals) = lval >>= \case
-       VConstant (String name) -> go (deleteEnv name res) lvals
+       VString name -> go (deleteEnv name res) lvals
        v -> expectedString v
   (VAttrSet _, _) -> expectedList attrList
   _ -> expectedAttrs attrSet
@@ -193,10 +184,10 @@ builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
 builtin_substring :: forall m. Monad m =>
                      WHNFValue m -> WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_substring start len str = case (start, len, str) of
-  (VConstant (Int start), VConstant (Int len), VConstant (String str)) -> do
+  (VConstant (NInt start), VConstant (NInt len), VString str) -> do
     pure $ strV $ substring start len str
-  (VConstant (Int _), VConstant (Int _), v) -> expectedString v
-  (VConstant (Int _), v, _) -> expectedInt v
+  (VConstant (NInt _), VConstant (NInt _), v) -> expectedString v
+  (VConstant (NInt _), v, _) -> expectedInt v
   (v, _, _) -> expectedInt v
 
 -- | See if the first argument is a member of the second (a list).
@@ -207,7 +198,7 @@ builtin_elem item = \case
     go (lval:lvals) = do
       val <- lval :: LazyValue m
       binop_eq item val >>= \case
-        VConstant (Bool True) -> convert True
+        VConstant (NBool True) -> convert True
         _ -> go lvals
   v -> expectedList v
 

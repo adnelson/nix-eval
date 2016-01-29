@@ -1,20 +1,19 @@
-module Nix.Eval.Builtins.TopLevel where
+module Nix.Evaluator.Builtins.TopLevel where
 
 import Nix.Common
-import Nix.Types (NBinaryOp(..), NUnaryOp(..))
-import Nix.Expressions
+import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
 import Nix.Values.Generic
 import Nix.Values.Lazy
 import Nix.Values.NativeConversion
-import Nix.Eval.Errors (EvalError(NotImplemented))
-import Nix.Eval.Builtins.Operators
-import Nix.Eval.Builtins.NativeFunctions
-import Nix.Eval.Evaluator (evaluate)
+import Nix.Evaluator.Contexts (WriteMessage(..))
+import Nix.Evaluator.Errors (EvalError(..), FatalError(NotImplemented))
+import Nix.Evaluator.Builtins.Operators
+import Nix.Evaluator.Builtins.NativeFunctions
 
 -- | Throws a 'NotImplemented' error with the given name. We should be
 -- able to get rid of this once the implementation is complete.
 notImplemented :: Monad m => Text -> LazyValue m
-notImplemented = throwError . NotImplemented
+notImplemented = throwError . FatalError . NotImplemented
 
 -- | The `builtins` object.
 builtins :: WriteMessage m => LAttrSet m

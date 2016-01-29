@@ -2,13 +2,12 @@ module Nix.Spec.EvaluatorSpec (main, spec) where
 
 import Test.Hspec
 import Test.QuickCheck (property)
-import Nix.Types (FormalParamSet(..), Formals(..))
+import Nix.Expr
 import Nix.Common
-import Nix.Constants
+import Nix.Atoms
 import Nix.Values hiding (WHNFValue, LazyValue)
-import Nix.Expressions
 import Nix.Spec.Lib as Lib
-import Nix.Eval (builtin_throw, builtin_seq, binop_div, EvalError(..))
+import Nix.Evaluator (builtin_throw, builtin_seq, binop_div, EvalError(..))
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -39,23 +38,23 @@ testBalloonSpec = describe "test-balloon expressions" $ do
 functionsSpec :: Spec
 functionsSpec = describe "functions" $ do
   it "should evaluate the identity function" $ do
-    shouldEvalToWithEnv emptyE ("x" --> "x")
-                               (functionV (FormalName "x") (emptyC "x"))
+    shouldEvalToWithEnv emptyE ("x" ==> "x")
+                               (functionV (Param "x") (emptyC "x"))
   it "should evaluate nested functions" $ do
-    shouldEvalToWithEnv emptyE ("x" --> "y" --> "x")
-                               (functionV (FormalName "x")
-                                          (emptyC ("y" --> "x")))
+    shouldEvalToWithEnv emptyE ("x" ==> "y" ==> "x")
+                               (functionV (Param "x")
+                                          (emptyC ("y" ==> "x")))
   it "should evaluate function applications" $ do
-    let expr = ("x" --> "x") @@ (strE "hello")
+    let expr = ("x" ==> "x") @@ mkStr "hello"
     expr `shouldEvalTo` "hello"
   it "should capture environment in closure" $ do
     let env = mkEnv [("x", intV 1)]
-    shouldEvalToWithEnv env (("foo" --> "x") @@ intE 2) (intV 1)
+    shouldEvalToWithEnv env (("foo" ==> "x") @@ mkInt 2) (intV 1)
   describe "unpacking arguments" $ do
     describe "without defaults" $ do
       let mkParams = FixedParamSet . M.fromList . map (\p -> (p, Nothing))
       let params = mkParams ["foo", "bar"]
-      let func = ELambda (FormalSet params Nothing) ("foo" + "bar")
+      let func = ParamSet params Nothing ==> "foo" + "bar"
       it "should unpack attribute sets" $ do
         func @@ attrsE [("foo", 1), ("bar", 2)] `shouldEvalTo` intV 3
       it "should fail if argument is not a set" $ do
@@ -67,15 +66,15 @@ functionsSpec = describe "functions" $ do
         Left (MissingArguments args) <- evalStrict1 (func @@ attrsE [])
         S.fromList args `shouldBe` S.fromList ["foo", "bar"]
       it "should allow assigning the argument to a variable" $ do
-        let func = ELambda (FormalSet params (Just "args")) ("args" !. "foo")
-        func @@ attrsE [("foo", 1), ("bar", nullE)] `shouldEvalTo` intV 1
+        let func = ParamSet params (Just "args") ==> ("args" !. "foo")
+        func @@ attrsE [("foo", 1), ("bar", mkNull)] `shouldEvalTo` intV 1
       it "should fail if extra args passed to fixed param set" $ do
         func @@ attrsE [("foo", 1), ("bar", 2), ("baz", 3)]
           `shouldErrorWith` ["ExtraArguments", "baz"]
     describe "default arguments" $ do
       let params = FixedParamSet $ M.fromList [("foo", Nothing),
                                                ("bar", Just 1)]
-          func = ELambda (FormalSet params Nothing) ("foo" + "bar")
+          func = ParamSet params Nothing ==> "foo" + "bar"
       it "should allow default arguments" $ do
         func @@ attrsE [("foo", 2)] `shouldEvalTo` intV 3
       it "should let the default arguments be overridden" $ do
@@ -84,17 +83,17 @@ functionsSpec = describe "functions" $ do
         let params = FixedParamSet $ M.fromList [("foo", Nothing),
                                                  ("bar", Just ("blaz" + 2))]
         let func = letE "blaz" 6 $
-                     ELambda (FormalSet params Nothing) ("foo" + "bar")
+                     mkFunction (ParamSet params Nothing) ("foo" + "bar")
         func @@ attrsE [("foo", 4)] `shouldEvalTo` intV 12
       it "should allow defaults to refer to other arguments" $ do
         let params = FixedParamSet $ M.fromList [("foo", Nothing),
                                                  ("bar", Just ("foo" + 2))]
-        let func = ELambda (FormalSet params Nothing) ("foo" + "bar")
+        let func = mkFunction (ParamSet params Nothing) ("foo" + "bar")
         func @@ attrsE [("foo", 4)] `shouldEvalTo` intV 10
       it "should allow defaults to refer to the arguments name" $ do
         let params = FixedParamSet $ M.fromList [("foo", Just "args"),
                                                  ("bar", Nothing)]
-        let func = ELambda (FormalSet params (Just "args"))
+        let func = mkFunction (ParamSet params (Just "args"))
                      (("foo" !. "bar") + 2)
         pendingWith "getting infinite loops here :("
         func @@ attrsE [("bar", 9)] `shouldEvalTo` intV 11
@@ -125,19 +124,19 @@ builtinAppSpec = describe "application of builtins" $ do
 -- before passing it into a function.
 lazyEvalSpec :: Spec
 lazyEvalSpec = describe "lazy evaluation" $ do
-  let errE = "throw" @@ strE "oh no!"
+  let errE = "throw" @@ mkStr "oh no!"
   it "should not evaluate a function argument unless needed" $ do
     -- Make a function which ignores its argument (just returns "1").
-    let constFunc = "_" --> intE 1
+    let constFunc = "_" ==> mkInt 1
      -- The constant function should ignore an error argument.
     constFunc @@ errE `shouldEvalTo` intV 1
   it "should short-circuit logical AND" $ do
     -- Evaluation should return without triggering the error.
-    let expr = boolE False $&& errE
+    let expr = mkBool False $&& errE
     expr `shouldEvalTo` boolV False
   it "should short-circuit logical OR" $ do
     -- Evaluation should return without triggering the error.
-    let expr = boolE True $|| errE
+    let expr = mkBool True $|| errE
     expr `shouldEvalTo` boolV True
   -- Test the `toNative` class of functions.
   describe "toNative" $ do
@@ -175,7 +174,7 @@ attrSetSpec = describe "attribute sets" $ do
     it "should not have a problem with error members unless accessed" $ do
       -- Create an attribute set in which one of the members causes an
       -- error when evaluated.
-      let mySet = attrsE [("good", strE "hello"),
+      let mySet = attrsE [("good", mkStr "hello"),
                           ("bad", "undefined-variable")]
       mySet !. "good" `shouldEvalTo` strV "hello"
       mySet !. "bad" `shouldErrorWith` ["NameError", "undefined-variable"]
@@ -207,11 +206,11 @@ withSpec :: Spec
 withSpec = describe "with expressions" $ do
   it "should introduce variables" $ do
     let mySet = attrsE [("x", 1)]
-    withE mySet "x" `shouldEvalTo` intV 1
+    mkWith mySet "x" `shouldEvalTo` intV 1
   it "should introduce variables from recursive sets" $ do
     let mySet = recAttrsE [("x", 1), ("y", "x")]
-    withE mySet "x" `shouldEvalTo` intV 1
-    withE mySet "y" `shouldEvalTo` intV 1
+    mkWith mySet "x" `shouldEvalTo` intV 1
+    mkWith mySet "y" `shouldEvalTo` intV 1
   it "should not propagate environment into the record" $ do
     let expr = letsE
                  -- Introduce a variable `x`.
@@ -224,52 +223,52 @@ withSpec = describe "with expressions" $ do
     expr `shouldErrorWith` ["KeyError", "x"]
   it "should not have a problem with error variables unless accessed" $ do
     let mySet = attrsE [("x", 1), ("fail", failingExpression)]
-    withE mySet "x" `shouldEvalTo` intV 1
-    shouldError $ withE mySet "fail"
+    mkWith mySet "x" `shouldEvalTo` intV 1
+    shouldError $ mkWith mySet "fail"
 
 letSpec :: Spec
 letSpec = describe "let conversion" $ do
   it "should introduce a variable" $ property $ \constant -> do
-    letE "x" (fromConstant constant) "x" `shouldEvalTo` fromConstant constant
+    letE "x" (fromAtom constant) "x" `shouldEvalTo` fromAtom constant
   it "should let variables reference each other" $ do
     property $ \constant -> do
-      let expr = letsE [("x", fromConstant constant),
+      let expr = letsE [("x", fromAtom constant),
                         ("y", "x")] "y"
-      expr `shouldEvalTo` fromConstant constant
+      expr `shouldEvalTo` fromAtom constant
 
 listSpec :: Spec
 listSpec = describe "lists" $ do
   it "should eval an empty list" $ do
-    listE [] `shouldEvalTo` listV []
+    mkList [] `shouldEvalTo` listV []
   it "should eval a list with a few elements" $ do
-    listE [1, 2, 3] `shouldEvalTo` listV (map intV [1, 2, 3])
+    mkList [1, 2, 3] `shouldEvalTo` listV (map intV [1, 2, 3])
   describe "operations on lists" $ do
     it "should map a function over a list" $ property $ \list ->
-      "map" @@ ("x" --> "x") @@ fromConstants list
-        `shouldEvalTo` fromConstants list
+      "map" @@ ("x" ==> "x") @@ fromAtoms list
+        `shouldEvalTo` fromAtoms list
     it "should map the +1 function over a list" $ property $ \nums -> do
-        "map" @@ ("x" --> "x" + 1) @@ (fromConstants $ map Int nums)
-          `shouldEvalTo` fromConstants (map (\i -> Int (i + 1)) nums)
+        "map" @@ ("x" ==> "x" + 1) @@ (fromAtoms $ map NInt nums)
+          `shouldEvalTo` fromAtoms (map (\i -> NInt (i + 1)) nums)
     it "should map over a nested list" $ property $ \nums1 nums2 -> do
-      let list1 = fromConstants $ map Int nums1
-          list2 = fromConstants $ map Int nums2
-          list3 = listE [list1, list2]
+      let list1 = fromAtoms $ map NInt nums1
+          list2 = fromAtoms $ map NInt nums2
+          list3 = mkList [list1, list2]
       -- The ID function over a nested list
-      "map" @@ ("x" --> "x") @@ list3
-        `shouldEvalTo` listV (map (fromConstants . map Int) [nums1, nums2])
+      "map" @@ ("x" ==> "x") @@ list3
+        `shouldEvalTo` listV (map (fromAtoms . map NInt) [nums1, nums2])
       -- Mapping the map function
-      "map" @@ ("map" @@ ("x" --> "x")) @@ list3
-        `shouldEvalTo` listV [fromConstants $ map Int nums1,
-                              fromConstants $ map Int nums2]
+      "map" @@ ("map" @@ ("x" ==> "x")) @@ list3
+        `shouldEvalTo` listV [fromAtoms $ map NInt nums1,
+                              fromAtoms $ map NInt nums2]
       -- Mapping functions which do things
-      "map" @@ ("map" @@ ("x" --> "x" * 2)) @@ list3
-        `shouldEvalTo` listV [fromConstants $ map (Int . (*2)) nums1,
-                              fromConstants $ map (Int . (*2)) nums2]
+      "map" @@ ("map" @@ ("x" ==> "x" * 2)) @@ list3
+        `shouldEvalTo` listV [fromAtoms $ map (NInt . (*2)) nums1,
+                              fromAtoms $ map (NInt . (*2)) nums2]
     describe "length" $ do
       it "should get the length of a list" $ property $ \list ->
-        "length" @@ fromConstants list
-          `shouldEvalTo` fromInt (length list)
+        "length" @@ fromAtoms list
+          `shouldEvalTo` convert (length list)
       it "shouldn't matter if the list has an error value" $ do
         property $ \list -> do
-          "length" @@ (listE (failingExpression : map fromConstant list))
-            `shouldEvalTo` fromInt (length list + 1)
+          "length" @@ (mkList (failingExpression : map fromAtom list))
+            `shouldEvalTo` convert (length list + 1)

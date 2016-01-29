@@ -1,9 +1,7 @@
 module Nix.Values.Strict where
 
 import Nix.Common
-import Nix.Expressions
-import Nix.Eval.Errors
-import Nix.Constants
+import Nix.Evaluator.Errors
 import Nix.Values.Generic
 import Nix.Values.Lazy
 
@@ -26,6 +24,7 @@ type SEnvironment = Environment Identity
 strictToLazy :: Monad m => StrictValue -> WHNFValue m
 strictToLazy = \case
   VConstant c -> VConstant c
+  VString s -> VString s
   VAttrSet attrs -> VAttrSet $ transE attrs
   VList vals -> VList $ map trans vals
   VFunction p (Closure env e) -> VFunction p (Closure (transE env) e)
@@ -41,6 +40,7 @@ strictToLazy = \case
 whnfToStrict :: Monad m => WHNFValue m -> Eval m StrictValue
 whnfToStrict val = case val of
   VConstant c -> pure $ VConstant c
+  VString s -> pure $ VString s
   VAttrSet attrs -> VAttrSet <$> lazyEnvToStrictEnv attrs
   VList lvals -> VList <$> do
     strictVals <- mapM lazyToStrict lvals
