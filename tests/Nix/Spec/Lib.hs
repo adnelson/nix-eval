@@ -167,7 +167,7 @@ evalStrict2 = map snd . evalStrict
 
 evalStrictWithEnv :: LEnvironment -> NExpr ->
                     IO (Either EvalError StrictValue, MockState)
-evalStrictWithEnv env expr = runMock $ lazyToStrict $ evalNExpr env expr
+evalStrictWithEnv env expr = runMock $ lazyToStrict $ evaluate env expr
 
 runNativeStrict :: LNative WHNFValue ->
                    IO (Either EvalError StrictValue, MockState)
@@ -197,7 +197,7 @@ shouldEvalTo expr val = do
 
 shouldEvalToWithEnv :: LEnvironment -> NExpr -> StrictValue -> Expectation
 shouldEvalToWithEnv env expr val = do
-  result <- runMock1 $ lazyToStrict $ evalNExpr env expr
+  result <- runMock1 $ lazyToStrict $ evaluate env expr
   result `shouldBe` pure val
 
 shouldBeError :: LazyValue -> Expectation
@@ -238,7 +238,7 @@ shouldBeValid action = do
 
 shouldErrorWithEnv :: LEnvironment -> NExpr -> [String] -> Expectation
 shouldErrorWithEnv env expr strings = do
-  res <- runMock1 $ lazyToStrict $ evalNExpr env expr
+  res <- runMock1 $ lazyToStrict $ evaluate env expr
   res `shouldSatisfy` \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
@@ -247,7 +247,7 @@ shouldEval :: NExpr -> Expectation
 shouldEval expr = shouldBeValid $ lazyToStrict $ performEval expr
 
 shouldEvalWithEnv :: LEnvironment -> NExpr -> Expectation
-shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evalNExpr env expr
+shouldEvalWithEnv env expr = shouldBeValid $ lazyToStrict $ evaluate env expr
 
 infixl 0 `shouldEvalTo`
 

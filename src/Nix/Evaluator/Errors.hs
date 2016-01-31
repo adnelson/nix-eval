@@ -14,6 +14,9 @@ data FatalError
   | EmptyKeyPath
   -- ^ If we were to encounter an empty key path when inserting into
   -- an attribute set.
+  | BindingEvaluationFailed
+  -- ^ If we evaluate a binding list and it results in a Defined rather than
+  -- an InProgress. (See the evaluator module.)
   deriving (Show, Eq, Typeable, Generic)
 
 -- | The type of errors which can occur during evaluation.

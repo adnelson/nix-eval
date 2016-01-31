@@ -23,4 +23,4 @@ import Nix.Evaluator.RuntimeTypes
 
 -- | Evaluate an expression with the builtins in scope.
 performEval :: Nix m => NExpr -> LazyValue m
-performEval = evalNExpr topLevelBuiltins
+performEval = evaluate topLevelBuiltins
