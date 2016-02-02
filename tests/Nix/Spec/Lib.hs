@@ -76,9 +76,6 @@ instance Arbitrary EvalError where
 instance Arbitrary RuntimeType where
   arbitrary = oneof $ pure <$> enumFrom RT_Null
 
-instance IsString NExpr where
-  fromString = mkSym . fromString
-
 -- | NExprs can be parsed from numbers.
 instance Num NExpr where
   fromInteger = mkInt

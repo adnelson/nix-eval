@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecursiveDo #-}
 module Nix.Evaluator.Evaluator where
 
 import Control.Monad.State.Strict  --(MonadState(..), modify, execStateT)
@@ -7,7 +8,7 @@ import Nix.Evaluator.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Evaluator.Errors
 import Nix.Atoms
 import Nix.Expr (Params(..), ParamSet(..), NExpr, Antiquoted(..),
-                 NUnaryOp(..), NBinaryOp(..), NKeyName(..), NExprF(..),
+                 NUnaryOp(..), NBinaryOp(..), NExprF(..),
                  NString(..), Binding(..), mkSym, (!.))
 import Nix.Values
 import Nix.Values.NativeConversion
@@ -78,161 +79,132 @@ evalApply func arg = func >>= \case
 -- | Evaluate a nix string into actual text.
 evalString :: Monad ctx => LEnvironment ctx -> NString NExpr -> Eval ctx Text
 evalString env = \case
-  DoubleQuoted strs -> concat <$> mapEval strs
-  Indented strs -> intercalate "\n" <$> mapEval strs
-  where mapEval = mapM (evalAntiquoted pure env)
+  DoubleQuoted strs -> concat <$> mapM (evalAntiquoted env) strs
+  Indented strs -> intercalate "\n" <$> mapM (evalAntiquoted env) strs
 
 -- | Evaluate an 'Antiquoted', resulting in 'Text'.
 evalAntiquoted :: Monad ctx =>
-                  (txt -> Eval ctx Text) ->
                   LEnvironment ctx ->
-                  Antiquoted txt NExpr ->
+                  Antiquoted NExpr ->
                   Eval ctx Text
-evalAntiquoted convertor env = \case
-  Plain string -> convertor string
+evalAntiquoted env = \case
+  Plain string -> pure string
   Antiquoted expr -> evaluate env expr >>= \case
     VString str -> pure str
     v -> expectedString v
 
--- | Evaluate an 'NKeyName', which must result in 'Text'.
-evalKeyName :: Monad ctx => LEnvironment ctx ->
-               NKeyName NExpr -> Eval ctx Text
-evalKeyName env = \case
-  StaticKey text -> pure text
-  DynamicKey antiquoted -> evalAntiquoted convertor env antiquoted
-  where convertor = evalString env
-
 -- | Data type to represent the state of an attribute set as it's built.
--- Values of this type are either actual lazy values ('Defined'), or they are
+-- Values of this type are either actual expressions ('Defined'), or they are
 -- records containing other 'InProgress' objects ('InProgress').
 -- This allows us to respond to this kind of syntax:
 -- @{a.x = 1; b = 2; a.y = 3;}@. We can represent this intermediately as
 -- @InProgress {a: InProgress {x: Defined 1, y: Defined 3}, b: Defined 2}@.
 -- The idea is that when building the set, we know if something is an error
 -- like a duplicate key if the key path results in a 'Defined'.
-data InProgress ctx
-  = Defined (LazyValue ctx)
-  | InProgress (Record (InProgress ctx))
+data InProgress
+  = Defined NExpr
+  | InProgress (Record InProgress)
 
-data InProgress'
-  = Defined' NExpr
-  | InProgress' (Record InProgress')
+-- | Once it's finished, we can convert an 'InProgress' into a lazy value.
+convertIP :: Monad ctx => LEnvironment ctx -> InProgress -> LazyValue ctx
+convertIP env = \case
+  Defined expr -> evaluate env expr
+  InProgress record -> pure $ VAttrSet $ recordIPToEnv record env
 
-convertIP' :: Monad ctx =>
-              LEnvironment ctx ->
-              InProgress' ->
-              LazyValue ctx
-convertIP' env = \case
-  Defined' expr -> evaluate env expr
-  InProgress' record -> do
-    let step aset (key, inProg) = insertEnvL key (convertIP' env inProg) aset
-    pure $ VAttrSet $ foldl' step emptyE $ H.toList record
-
-
--- | Once it's finished, we can convert an 'InProgress' back into an
--- a lazy value.
-convertIP :: Monad ctx => InProgress ctx -> LazyValue ctx
-convertIP (Defined v) = v
-convertIP (InProgress record) = do
-  let items = H.toList record
-      step aset (key, asip) = insertEnvL key (convertIP asip) aset
-  pure $ VAttrSet $ foldl' step emptyE items
+recordIPToEnv :: Monad ctx => LEnvironment ctx -> Record InProgress ->
+                 LEnvironment ctx
+recordIPToEnv env record = do
+  let step aset (key, inProg) = insertEnvL key (convertIP env inProg) aset
+  foldl' step emptyE $ H.toList record
 
 -- | Given a key path (a list of strings), stick that keypath into the in-
 -- progress object we're building.
-insertKeyPath' :: Monad ctx =>
-                 [Text] ->
-                 NExpr ->
-                 InProgress' ->
-                 Eval ctx InProgress'
-insertKeyPath' kpath expr inProg = loop kpath inProg where
-  loop [] _ = pure $ Defined' expr
-  loop _ (Defined' _) = throwError $ DuplicateKeyPath kpath
-  loop (key:keys) (InProgress' record) = do
-    next <- loop keys $ H.lookupDefault (InProgress' mempty) key record
-    pure $ InProgress' $ H.insert key next record
-
--- | Given a key path (a list of strings), stick that keypath into the in-
--- progress object we're building.
-insertKeyPath :: Monad ctx =>
-                 [Text] ->
-                 LazyValue ctx ->
-                 InProgress ctx ->
-                 Eval ctx (InProgress ctx)
-insertKeyPath kpath lval inProg = loop kpath inProg where
-  loop [] _ = pure $ Defined lval
-  loop _ (Defined _) = throwError $ DuplicateKeyPath kpath
+insertKeyPath :: Monad ctx => [Text] -> NExpr -> InProgress ->
+                 Eval ctx InProgress
+insertKeyPath kpath expr inProg = loop kpath inProg where
+  -- Insering a key. Recur on the remaining keys to build up an in-progress,
+  -- and then add that under the given key.
   loop (key:keys) (InProgress record) = do
     next <- loop keys $ H.lookupDefault (InProgress mempty) key record
     pure $ InProgress $ H.insert key next record
+  -- If we encounter a defined expression here, it means the key path was
+  -- duplicated, which is an error.
+  loop (_:_) (Defined _) = throwError $ DuplicateKeyPath kpath
+  -- If we're out of keys to traverse, we stick in the expression.
+  loop [] _ = pure $ Defined expr
 
--- | Convert a list of bindings to a lazy value.
-bindingsToLazyValue' :: Monad ctx =>
-                       LEnvironment ctx ->
-                       [Binding NExpr] ->
-                       LazyValue ctx
-bindingsToLazyValue' env bindings = convertIP' env =<< do
-  flip execStateT (InProgress' mempty) $ forM_ bindings $ \case
+-- | Given a key path (a list of strings), stick that keypath into the in-
+-- progress object we're building.
+insertKeyPathRecord :: Monad ctx =>
+                       [Text] ->
+                       NExpr ->
+                       Record InProgress ->
+                       Eval ctx (Record InProgress)
+insertKeyPathRecord kpath expr record = do
+  insertKeyPath kpath expr (InProgress record) >>= \case
+    Defined _ -> throwError $ FatalError EmptyKeyPath
+    InProgress record' -> pure record'
+
+buildInProgressRecord :: Monad ctx =>
+                         LEnvironment ctx ->
+                         [Binding NExpr] ->
+                         Eval ctx (Record InProgress)
+buildInProgressRecord env bindings = flip execStateT mempty $
+  forM_ bindings $ \case
     NamedVar keys expr -> do
       -- Convert the key expressions to a list of text.
-      keyPath <- lift $ mapM (evalKeyName env) keys
+      keyPath <- lift $ mapM (evalAntiquoted env) keys
       -- Insert the key into the in-progress set.
-      get >>= lift . insertKeyPath' keyPath expr >>= put
+      record <- get
+      record' <- lift $ insertKeyPathRecord keyPath expr record
+      put record'
     Inherit maybeExpr keyNames -> forM_ keyNames $ \keyName -> do
       -- Evaluate the keyName to a string.
-      varName <- lift $ evalKeyName env keyName
+      varName <- lift $ evalAntiquoted env keyName
       -- Create the actual expression.
       let expr = case maybeExpr of
             Nothing -> mkSym varName
             Just e -> e !. varName
       -- Insert the keyname into the state.
-      get >>= lift . insertKeyPath' [varName] expr >>= put
+      get >>= lift . insertKeyPathRecord [varName] expr >>= put
 
--- | Convert a list of bindings to a lazy value.
-bindingsToLazyValue :: Monad ctx =>
-                       LEnvironment ctx ->
-                       [Binding NExpr] ->
-                       LazyValue ctx
-bindingsToLazyValue env bindings = convertIP =<< do
-  flip execStateT (InProgress mempty) $ forM_ bindings $ \case
-    NamedVar keys expr -> do
-      -- Convert the key expressions to a list of text.
-      keyPath <- lift $ mapM (evalKeyName env) keys
-      -- Insert the key into the in-progress set.
-      let lval = evaluate env expr
-      get >>= lift . insertKeyPath keyPath lval >>= put
-    Inherit maybeExpr keyNames -> forM_ keyNames $ \keyName -> do
-      -- Evaluate the keyName to a string.
-      varName <- lift $ evalKeyName env keyName
-      -- Create the lazy value.
-      let lval = evaluate env $ case maybeExpr of
-            Nothing -> mkSym varName
-            Just expr -> expr !. varName
-      -- Insert the keyname into the state.
-      get >>= lift . insertKeyPath [varName] lval >>= put
+-- | Convert a list of bindings to an environment. The bindings can optionally
+-- be recursive, meaning that one binding in the list can refer to another.
+bindingsToEnv :: Monad ctx =>
+                 Bool ->
+                 LEnvironment ctx ->
+                 [Binding NExpr] ->
+                 Eval ctx (LEnvironment ctx)
+bindingsToEnv recursively env bindings = case recursively of
+  False -> recordIPToEnv env <$> buildInProgressRecord env bindings
+  True -> do
+    rec
+      mergedEnv <- pure $ env `unionEnv` env'
+      env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
+    pure env'
 
 evaluate :: Monad m => LEnvironment m -> NExpr -> LazyValue m
 evaluate env (Fix expr) = do
   let recur = evaluate env -- useful shorthand
   case expr of
-    NConstant atom -> pure $ VConstant atom
     NSym name -> case lookupEnv name env of
       Nothing -> throwError $ NameError name (envKeySet env)
       Just val -> val
+    NConstant atom -> pure $ VConstant atom
+    NStr string -> VString <$> evalString env string
     NList exprs -> pure $ VList $ fromList $ map recur exprs
     NApp func arg -> recur func `evalApply` recur arg
     NAbs param body -> pure $ VFunction param $ Closure env body
-    NLet bindings expr' -> bindingsToLazyValue env bindings >>= \case
-      VAttrSet vals -> evaluate (env `unionEnv` vals) expr'
-      _ -> throwError $ FatalError BindingEvaluationFailed
-    NSet bindings -> bindingsToLazyValue' env bindings
-    NRecSet bindings -> bindingsToLazyValue env bindings
-    NStr string -> VString <$> evalString env string
+    NLet bindings expr' -> do
+      env' <- bindingsToEnv True env bindings
+      evaluate (env `unionEnv` env') expr'
+    NSet bindings -> VAttrSet <$> bindingsToEnv False env bindings
+    NRecSet bindings -> VAttrSet <$> bindingsToEnv True env bindings
     NSelect expr' attrPath maybeDefault -> go attrPath $ recur expr' where
       go [] lval = lval
       go (keyName:keyNames) lval = lval >>= \case
         VAttrSet attrs -> do
-          key <- evalKeyName env keyName
+          key <- evalAntiquoted env keyName
           case lookupEnv key attrs of
             Just lval' -> go keyNames lval'
             Nothing -> case maybeDefault of

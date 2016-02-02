@@ -168,6 +168,9 @@ attrSetSpec = describe "attribute sets" $ do
     it "should access set members" $ do
       let mySet = attrsE [("x", 1)]
       mySet !. "x" `shouldEvalTo` intV 1
+    it "should not let members refer to each other" $ do
+      let mySet = attrsE [("x", 1), ("y", "x")]
+      mySet !. "y" `shouldErrorWith` ["NameError", "x"]
     it "should access nested set members" $ do
       -- This is like writing `({x = {y = 1;}}.x).y`
       let mySet = attrsE [("x", (attrsE [("y", 1)]))]
@@ -178,7 +181,7 @@ attrSetSpec = describe "attribute sets" $ do
       -- slightly differently, as the `or` syntax (which we test below)
       -- demands that key paths be treated as a list.
       let mySet = attrsE [("x", (attrsE [("y", 1)]))]
-          expr = Fix $ NSelect mySet [StaticKey "x", StaticKey "y"] Nothing
+          expr = Fix $ NSelect mySet ["x", "y"] Nothing
       expr `shouldEvalTo` intV 1
     it "should not have a problem with error members unless accessed" $ do
       -- Create an attribute set in which one of the members causes an
@@ -187,16 +190,24 @@ attrSetSpec = describe "attribute sets" $ do
                           ("bad", "undefined-variable")]
       mySet !. "good" `shouldEvalTo` strV "hello"
       mySet !. "bad" `shouldErrorWith` ["NameError", "undefined-variable"]
+    describe "dynamic keys" $ do
+      it "should evaluate dynamic keys" $ do
+        -- So what we're doing here is akin to:
+        -- let foo = "x"; in {x = 1;}.${foo}
+        let mySet = attrsE [("x", 1)]
+            expr = Fix $ NSelect mySet [Antiquoted "foo"] Nothing
+            env = mkEnv [("foo", strV "x")]
+        shouldEvalToWithEnv env expr $ intV 1
     describe "missing keys" $ do
       it "should throw a KeyError if key doesn't exist" $ do
         attrsE [] !. "x" `shouldErrorWith` ["KeyError", "x"]
       it "should be OK if there's a default" $ do
         -- Equivalent to `{}.x or 1`
-        let expr = Fix $ NSelect (attrsE []) [StaticKey "x"] $ Just 1
+        let expr = Fix $ NSelect (attrsE []) ["x"] $ Just 1
         expr `shouldEvalTo` intV 1
-      it "should be OK if there's a default (long keypath" $ do
-        -- Equivalent to `{}.x or 1`
-        let keyPath = StaticKey <$> ["x", "y", "z"]
+      it "should be OK if there's a default (long keypath)" $ do
+        -- Equivalent to `{}.x.y.z or 1`
+        let keyPath = ["x", "y", "z"]
         let expr = Fix $ NSelect (attrsE []) keyPath $ Just 1
         expr `shouldEvalTo` intV 1
   describe "recursive" $ do
@@ -207,15 +218,13 @@ attrSetSpec = describe "attribute sets" $ do
       let mySet = recAttrsE [("x", 1)]
       mySet !. "x" `shouldEvalTo` intV 1
     it "should access nested set members" $ do
-      -- This value is
-      -- rec {x = {y = x; z = 2};}
-      -- So accessing mySet.x.y.z should give 2.
-      let mySet = recAttrsE [("x", attrsE [("y", "x"),
-                                           ("z", 2)])]
+      -- This value is `rec {x = {y = x; z = 2};}`
+      -- So accessing `mySet.x.y.z` should give 2.
+      let mySet = recAttrsE [("x", attrsE [("y", "x"), ("z", 2)])]
       mySet !. "x" !. "y" !. "z" `shouldEvalTo` intV 2
     it "should allow inter-references in the set" $ do
       let mySet = recAttrsE [("x", 1), ("y", "x")]
-      mySet !. "y" `shouldEvalTo` intV 1
+      mySet !. "x" `shouldEvalTo` intV 1
     it "should not propagate environment into the record" $ do
       -- Expr: `with {x = 1; r = rec {};}; r.x`
       -- this should result in a key error because `r` doesn't have `x`.
