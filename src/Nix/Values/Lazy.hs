@@ -8,6 +8,7 @@ import Nix.Evaluator.RuntimeTypes
 import Nix.Evaluator.Contexts (WriteMessage(..))
 import Nix.Values.Generic
 import qualified Data.HashMap.Strict as H
+import Control.Monad.Fix (MonadFix(..))
 
 -- | The result of evaluation: it might be an error.
 newtype Eval m a = Eval {runEval :: ExceptT EvalError m a}

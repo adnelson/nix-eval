@@ -109,7 +109,7 @@ data InProgress
 convertIP :: Monad ctx => LEnvironment ctx -> InProgress -> LazyValue ctx
 convertIP env = \case
   Defined expr -> evaluate env expr
-  InProgress record -> pure $ VAttrSet $ recordIPToEnv record env
+  InProgress record -> pure $ VAttrSet $ recordIPToEnv env record
 
 recordIPToEnv :: Monad ctx => LEnvironment ctx -> Record InProgress ->
                  LEnvironment ctx
