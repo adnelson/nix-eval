@@ -92,7 +92,7 @@ mkEnv :: Monad m => [(Text, Value m)] -> Environment m
 mkEnv = Environment . H.fromList . map (map pure)
 
 -- | Same as 'mkEnv' but the values are lazy.
-mkEnvL :: Monad m => [(Text, m (Value m))] -> Environment m
+mkEnvL :: [(Text, m (Value m))] -> Environment m
 mkEnvL = Environment . H.fromList
 
 -- | Shorthand to create a closure from a list and an expression.
@@ -100,7 +100,7 @@ mkClosure :: Monad m => [(Text, Value m)] -> NExpr -> Closure m
 mkClosure env expr = Closure (mkEnv env) expr
 
 -- | Create a value from a string.
-strV :: Monad m => Text -> Value m
+strV :: Text -> Value m
 strV = VString
 
 -- | Create a value from an integer.
@@ -112,7 +112,7 @@ boolV :: Monad m => Bool -> Value m
 boolV = convert
 
 -- | Create a null value.
-nullV :: Monad m => Value m
+nullV :: Value m
 nullV = VConstant NNull
 
 -- | Create an attribute set value.
@@ -124,11 +124,11 @@ listV :: Monad m => [Value m] -> Value m
 listV = VList . fromList . map pure
 
 -- | Create a function value.
-functionV :: Monad m => Params NExpr -> Closure m -> Value m
+functionV :: Params NExpr -> Closure m -> Value m
 functionV params closure = VFunction params closure
 
 -- | Wrap a native into a value.
-nativeV :: Monad m => Native m v -> Value m
+nativeV :: Native m v -> Value m
 nativeV = VNative
 
 -- | Wrap a native into a monadic value.

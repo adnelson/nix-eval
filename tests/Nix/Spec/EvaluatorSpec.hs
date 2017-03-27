@@ -195,7 +195,8 @@ attrSetSpec = describe "attribute sets" $ do
         -- So what we're doing here is akin to:
         -- let foo = "x"; in {x = 1;}.${foo}
         let mySet = attrsE [("x", 1)]
-            expr = Fix $ NSelect mySet [Antiquoted "foo"] Nothing
+            path = [DynamicKey (Antiquoted "foo")]
+            expr = Fix $ NSelect mySet path Nothing
             env = mkEnv [("foo", strV "x")]
         shouldEvalToWithEnv env expr $ intV 1
     describe "missing keys" $ do

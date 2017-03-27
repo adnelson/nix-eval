@@ -195,6 +195,8 @@ bindingsToEnv recursively env bindings = case recursively of
     -- env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
     pure emptyE -- env'
 
+-- | Evaluates an arbitrary expression, in an arbitrary context,
+-- producing a lazy value on the other end (which might error)
 evaluate :: Monad m => LEnvironment m -> NExpr -> LazyValue m
 evaluate env (Fix expr) = do
   let recur = evaluate env -- useful shorthand
