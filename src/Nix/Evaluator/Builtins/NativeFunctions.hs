@@ -16,7 +16,7 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 
 -- | Convert a value to a env-variable-compatible string.
-valueToEnvString :: Monad ctx => WHNFValue ctx -> Eval ctx Text
+valueToEnvString :: MonadFix ctx => WHNFValue ctx -> Eval ctx Text
 valueToEnvString val = case val of
   VConstant c -> pure $ atomToEnvString c
   VString s -> pure s
@@ -30,7 +30,7 @@ valueToEnvString val = case val of
     expectedOneOf types val
 
 -- | Convert a value to a string.
-builtin_toString :: Monad m => WHNFValue m -> LazyValue m
+builtin_toString :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_toString val = map strV $ valueToEnvString val
 
 -- | Evaluate the first argument to weak-head normal form, and as long
@@ -39,36 +39,36 @@ builtin_toString val = map strV $ valueToEnvString val
 -- function body here doesn't actually /do/ anything. Simply by the
 -- fact that the first argument is in WHNF, it means that the function
 -- will fail if the first argument is an error.
-builtin_seq :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
+builtin_seq :: WHNFValue m -> LazyValue m -> LazyValue m
 builtin_seq = \_ -> id
 
 -- | The throw function forces an error to occur.
-builtin_throw :: Monad m => WHNFValue m -> LazyValue m
+builtin_throw :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_throw val = case val of
   VString msg -> throwError $ CustomError msg
   _ -> expectedString val
 
 -- | Asserts its first argument is true, and then returns its second.
-builtin_assert :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
+builtin_assert :: MonadFix m => WHNFValue m -> LazyValue m -> LazyValue m
 builtin_assert val res = case val of
   VConstant (NBool True) -> res
   VConstant (NBool False) -> throwError AssertionError
   _ -> expectedBool val
 
 -- | Get the length of a list.
-builtin_length :: Monad m => WHNFValue m -> LazyValue m
+builtin_length :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_length val = case val of
   VList vals -> pure $ convert (length vals)
   v -> expectedList v
 
 -- | Add to the front of a list.
-builtin_cons :: Monad m => LazyValue m -> WHNFValue m -> LazyValue m
+builtin_cons :: MonadFix m => LazyValue m -> WHNFValue m -> LazyValue m
 builtin_cons val v = case v of
   VList list -> pure $ VList $ (val `cons` list)
   _ -> expectedList v
 
 -- | Index into list. The list is the first argument.
-builtin_elemAt :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_elemAt :: MonadFix m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_elemAt val1 val2 = case val1 of
   VList list -> case val2 of
     VConstant (NInt i) | i < 0 -> throwError $ IndexError i (length list)
@@ -79,7 +79,7 @@ builtin_elemAt val1 val2 = case val1 of
   _ -> expectedList val1
 
 -- | Get the head of a list.
-builtin_head :: Monad m => WHNFValue m -> LazyValue m
+builtin_head :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_head val = case val of
   VList list -> case uncons list of
     Nothing -> throwError EmptyList
@@ -87,7 +87,7 @@ builtin_head val = case val of
   _ -> expectedList val
 
 -- | Get the tail of a list.
-builtin_tail :: Monad m => WHNFValue m -> LazyValue m
+builtin_tail :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_tail val = case val of
   VList list -> case uncons list of
     Nothing -> throwError EmptyList
@@ -95,19 +95,19 @@ builtin_tail val = case val of
   _ -> expectedList val
 
 -- | Maps a function over a list.
-builtin_map :: Monad m => LazyValue m -> WHNFValue m -> LazyValue m
+builtin_map :: MonadFix m => LazyValue m -> WHNFValue m -> LazyValue m
 builtin_map func = \case
   VList list -> pure $ VList $ map (evalApply func) list
   val -> expectedList val
 
 -- | Creates an `isX` function given a type to test a value against.
-mkTypeTest :: Monad m => RuntimeType -> WHNFValue m -> LazyValue m
+mkTypeTest :: MonadFix m => RuntimeType -> WHNFValue m -> LazyValue m
 mkTypeTest type_ = map convert . hasType type_
 
 -- | A bunch of runtime type checking tests.
 builtin_isAttrs, builtin_isList, builtin_isFunction, builtin_isInt,
   builtin_isBool, builtin_isNull, builtin_isString, builtin_isPath
-  :: Monad m => WHNFValue m -> LazyValue m
+  :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_isAttrs = mkTypeTest RT_Set
 builtin_isList = mkTypeTest RT_List
 builtin_isFunction = mkTypeTest RT_Lambda
@@ -119,27 +119,27 @@ builtin_isPath = mkTypeTest RT_Path
 
 -- | Deeply evaluate the first argument, and return the second if it's
 -- the first has no errors; else error.
-builtin_deepSeq :: Monad m => WHNFValue m -> LazyValue m -> LazyValue m
+builtin_deepSeq :: MonadFix m => WHNFValue m -> LazyValue m -> LazyValue m
 builtin_deepSeq val x = deeplyEval val >> x
 
 -- | Get the type of a value as a string.
-builtin_typeOf :: Monad m => WHNFValue m -> LazyValue m
+builtin_typeOf :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_typeOf v = VString . typeToString <$> typeOf v
 
 -- | Get the length of a nix string.
-builtin_stringLength :: Monad m => WHNFValue m -> LazyValue m
+builtin_stringLength :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_stringLength = \case
   VString s -> convert (length s)
   v -> expectedString v
 
 -- | Get all of the keys from a set as a list of strings.
-builtin_attrNames :: Monad m => WHNFValue m -> LazyValue m
+builtin_attrNames :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_attrNames = \case
   VAttrSet attrs -> pure $ VList $ map (pure . strV) $ envKeyList attrs
   v -> expectedAttrs v
 
 -- | Get all of the values from a set as a list of strings.
-builtin_attrValues :: Monad m => WHNFValue m -> LazyValue m
+builtin_attrValues :: MonadFix m => WHNFValue m -> LazyValue m
 builtin_attrValues = \case
   VAttrSet attrs -> pure $ VList $ envValueList attrs
   v -> expectedAttrs v
@@ -147,7 +147,7 @@ builtin_attrValues = \case
 -- | Return a set consisting of the attributes in the set e2 that also
 -- exist in the set e1. If keys are shared, the values from the second
 -- set will appear.
-builtin_intersectAttrs :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_intersectAttrs :: MonadFix m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_intersectAttrs = \case
   VAttrSet (Environment set1) -> \case
     VAttrSet (Environment set2) -> do
@@ -159,7 +159,7 @@ builtin_intersectAttrs = \case
 
 -- | First argument is the name of an attribute, and the second is a
 -- set. Returns whether that attribute is in the set.
-builtin_hasAttr :: Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_hasAttr :: MonadFix m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_hasAttr attrName attrSet = case (attrName, attrSet) of
   (VString name, VAttrSet aset) -> case lookupEnv name aset of
     Nothing -> convert False
@@ -169,7 +169,7 @@ builtin_hasAttr attrName attrSet = case (attrName, attrSet) of
 
 -- | First argument is an attribute set, second is a list of strings.
 -- Remove all keys in the list from the set.
-builtin_removeAttrs :: forall m. Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_removeAttrs :: forall m. MonadFix m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
   (VAttrSet set, VList names) -> go set $ toList names where
      go res [] = pure $ VAttrSet res
@@ -181,7 +181,7 @@ builtin_removeAttrs attrSet attrList = case (attrSet, attrList) of
 
 -- | `start` and `len` are ints, `str` is a string.
 -- Take `len` characters from `str` starting at character `start`.
-builtin_substring :: forall m. Monad m =>
+builtin_substring :: forall m. MonadFix m =>
                      WHNFValue m -> WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_substring start len str = case (start, len, str) of
   (VConstant (NInt start), VConstant (NInt len), VString str) -> do
@@ -191,7 +191,7 @@ builtin_substring start len str = case (start, len, str) of
   (v, _, _) -> expectedInt v
 
 -- | See if the first argument is a member of the second (a list).
-builtin_elem :: forall m. Monad m => WHNFValue m -> WHNFValue m -> LazyValue m
+builtin_elem :: forall m. MonadFix m => WHNFValue m -> WHNFValue m -> LazyValue m
 builtin_elem item = \case
   VList list -> go $ toList list where
     go [] = convert False
@@ -204,7 +204,7 @@ builtin_elem item = \case
 
 -- | Output the first argument as a string, and return the second
 -- argument.
-builtin_trace :: forall m. WriteMessage m =>
+builtin_trace :: forall m. (WriteMessage m, MonadFix m) =>
                  WHNFValue m -> LazyValue m -> LazyValue m
 builtin_trace val lval = do
   message <- valueToEnvString val

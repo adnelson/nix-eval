@@ -11,7 +11,10 @@ import Nix.Pretty (prettyNix)
 import Nix.Expr -- (Params(..), ParamSet(..), NExpr, Antiquoted(..),
                  -- NUnaryOp(..), NBinaryOp(..), NExprF(..),
                  -- NString(..), Binding(..), mkSym, (!.))
-import Nix.Values
+import Nix.Values (Eval(..), LEnvironment, Value(..), LazyValue,
+                   Native(..), Closure(..), applyNative, unwrapNative,
+                   applyNative2, envKeySet, unionEnv, lookupEnv, emptyE,
+                   insertEnvL, envKeyList)
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
 import qualified Data.HashMap.Strict as H
@@ -19,7 +22,7 @@ import qualified Data.Set as S
 
 -- | Given a lazy value meant to contain a function, and a second lazy
 -- value to apply that function to, perform the function application.
-evalApply :: Monad m => LazyValue m -> LazyValue m -> LazyValue m
+evalApply :: MonadFix m => LazyValue m -> LazyValue m -> LazyValue m
 evalApply func arg = func >>= \case
   VNative (NativeFunction f) -> unwrapNative =<< f arg
   VFunction params (Closure cEnv body) -> case params of
@@ -78,13 +81,13 @@ evalApply func arg = func >>= \case
   v -> expectedFunction v
 
 -- | Evaluate a nix string into actual text.
-evalString :: Monad ctx => LEnvironment ctx -> NString NExpr -> Eval ctx Text
+evalString :: MonadFix ctx => LEnvironment ctx -> NString NExpr -> Eval ctx Text
 evalString env = \case
   DoubleQuoted strs -> concat <$> mapM (evalAntiquoted env) strs
   Indented strs -> intercalate "\n" <$> mapM (evalAntiquoted env) strs
 
 -- | Evaluate an 'Antiquoted', resulting in 'Text'.
-evalAntiquoted :: Monad ctx =>
+evalAntiquoted :: MonadFix ctx =>
                   LEnvironment ctx ->
                   Antiquoted Text NExpr ->
                   Eval ctx Text
@@ -95,7 +98,7 @@ evalAntiquoted env = \case
     v -> expectedString v
 
 -- | Evaluate a KeyName, which must result in 'Text' or it's an error.
-evalKeyName :: Monad ctx =>
+evalKeyName :: MonadFix ctx =>
                LEnvironment ctx ->
                NKeyName NExpr ->
                Eval ctx Text
@@ -119,20 +122,33 @@ data InProgress
   | InProgress (Record InProgress)
 
 -- | Once it's finished, we can convert an 'InProgress' into a lazy value.
-convertIP :: Monad ctx => LEnvironment ctx -> InProgress -> LazyValue ctx
+convertIP :: MonadFix ctx => LEnvironment ctx -> InProgress -> LazyValue ctx
 convertIP env = \case
   Defined expr -> evaluate env expr
   InProgress record -> pure $ VAttrSet $ recordIPToEnv env record
 
-recordIPToEnv :: Monad ctx => LEnvironment ctx -> Record InProgress ->
+-- | If we've built an in-progress environment, we can convert it into
+-- an actual environment.
+--
+-- The algorithm for this is:
+-- Start with an empty env.
+-- For each (k, v) in the record, convert 'v' to an expression (which
+-- might recur on this function, if the record is in-progress), and
+-- insert it into the result under the key 'k'.
+recordIPToEnv :: MonadFix ctx =>
+                 LEnvironment ctx ->
+                 -- ^ Evaluation environment
+                 Record InProgress ->
+                 -- ^ In-progress set
                  LEnvironment ctx
+                 -- ^ Output environment
 recordIPToEnv env record = do
   let step aset (key, inProg) = insertEnvL key (convertIP env inProg) aset
   foldl' step emptyE $ H.toList record
 
 -- | Given a key path (a list of strings), stick that keypath into the in-
 -- progress object we're building.
-insertKeyPath :: Monad ctx => [Text] -> NExpr -> InProgress ->
+insertKeyPath :: MonadFix ctx => [Text] -> NExpr -> InProgress ->
                  Eval ctx InProgress
 insertKeyPath kpath expr inProg = loop kpath inProg where
   -- Insering a key. Recur on the remaining keys to build up an in-progress,
@@ -148,7 +164,7 @@ insertKeyPath kpath expr inProg = loop kpath inProg where
 
 -- | Given a key path (a list of strings), stick that keypath into the in-
 -- progress object we're building.
-insertKeyPathRecord :: Monad ctx =>
+insertKeyPathRecord :: MonadFix ctx =>
                        [Text] ->
                        NExpr ->
                        Record InProgress ->
@@ -158,7 +174,8 @@ insertKeyPathRecord kpath expr record = do
     Defined _ -> throwError $ FatalError EmptyKeyPath
     InProgress record' -> pure record'
 
-buildInProgressRecord :: Monad ctx =>
+-- | Convert a list of bindings to an in-progress record.
+buildInProgressRecord :: MonadFix ctx =>
                          LEnvironment ctx ->
                          [Binding NExpr] ->
                          Eval ctx (Record InProgress)
@@ -183,7 +200,7 @@ buildInProgressRecord env bindings = flip execStateT mempty $
 
 -- | Convert a list of bindings to an environment. The bindings can optionally
 -- be recursive, meaning that one binding in the list can refer to another.
-bindingsToEnv :: Monad ctx =>
+bindingsToEnv :: MonadFix ctx =>
                  Bool ->
                  LEnvironment ctx ->
                  [Binding NExpr] ->
@@ -191,13 +208,14 @@ bindingsToEnv :: Monad ctx =>
 bindingsToEnv recursively env bindings = case recursively of
   False -> recordIPToEnv env <$> buildInProgressRecord env bindings
   True -> do
-    -- mergedEnv <- pure $ env `unionEnv` env'
-    -- env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
-    pure emptyE -- env'
+    rec
+      mergedEnv <- pure $ env `unionEnv` env'
+      env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
+    pure env'
 
 -- | Evaluates an arbitrary expression, in an arbitrary context,
 -- producing a lazy value on the other end (which might error)
-evaluate :: Monad m => LEnvironment m -> NExpr -> LazyValue m
+evaluate :: MonadFix m => LEnvironment m -> NExpr -> LazyValue m
 evaluate env (Fix expr) = do
   let recur = evaluate env -- useful shorthand
   case expr of

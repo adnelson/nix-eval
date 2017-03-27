@@ -12,7 +12,7 @@ import Control.Monad.Fix (MonadFix(..))
 
 -- | The result of evaluation: it might be an error.
 newtype Eval m a = Eval {runEval :: ExceptT EvalError m a}
-  deriving (Functor, Applicative, Monad)
+  deriving (Functor, Applicative, Monad, MonadFix)
 
 -- | Run an evaluator action, and return either an error or a result.
 run :: Eval m a -> m (Either EvalError a)

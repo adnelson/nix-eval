@@ -16,7 +16,7 @@ notImplemented :: Monad m => Text -> LazyValue m
 notImplemented = throwError . FatalError . NotImplemented
 
 -- | The `builtins` object.
-builtins :: WriteMessage m => LAttrSet m
+builtins :: (WriteMessage m, MonadFix m) => LAttrSet m
 builtins = mkEnvL
   [ ("add", pNativeV $ interpretBinop NPlus)
   , ("all", notImplemented "all")
@@ -71,7 +71,7 @@ builtins = mkEnvL
   ]
 
 -- | The set of objects which should appear at top-level.
-topLevelBuiltins :: WriteMessage m => LAttrSet m
+topLevelBuiltins :: (WriteMessage m, MonadFix m) => LAttrSet m
 topLevelBuiltins = mkEnvL
   [ ("abort", notImplemented "abort")
   , ("baseNameOf", notImplemented "baseNameOf")
