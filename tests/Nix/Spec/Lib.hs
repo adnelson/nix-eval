@@ -26,12 +26,6 @@ instance (Arbitrary k, Eq k, Hashable k, Arbitrary v)
          => Arbitrary (HashMap k v) where
   arbitrary = H.fromList <$> arbitrary
 
-instance Arbitrary a => Arbitrary (Seq a) where
-  arbitrary = fromList <$> arbitrary
-
-instance (Arbitrary a, Ord a) => Arbitrary (Set a) where
-  arbitrary = S.fromList <$> arbitrary
-
 instance Arbitrary NAtom where
   arbitrary = oneof
     [ NInt <$> arbitrary
@@ -92,6 +86,7 @@ instance FromAtom NExpr where
   fromAtoms = mkList . map fromAtom
   fromAtomSet = attrsE . map (map fromAtom) . H.toList
 
+-- | Give a more specific type than `convert`, to prevent ambiguity.
 convertI :: FromAtom t => Integer -> t
 convertI = convert
 

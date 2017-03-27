@@ -7,9 +7,10 @@ import Nix.Common
 import Nix.Evaluator.Builtins.Operators (interpretBinop, interpretUnop)
 import Nix.Evaluator.Errors
 import Nix.Atoms
-import Nix.Expr (Params(..), ParamSet(..), NExpr, Antiquoted(..),
-                 NUnaryOp(..), NBinaryOp(..), NExprF(..),
-                 NString(..), Binding(..), mkSym, (!.))
+import Nix.Pretty (prettyNix)
+import Nix.Expr -- (Params(..), ParamSet(..), NExpr, Antiquoted(..),
+                 -- NUnaryOp(..), NBinaryOp(..), NExprF(..),
+                 -- NString(..), Binding(..), mkSym, (!.))
 import Nix.Values
 import Nix.Values.NativeConversion
 import qualified Data.Map as M
@@ -85,13 +86,25 @@ evalString env = \case
 -- | Evaluate an 'Antiquoted', resulting in 'Text'.
 evalAntiquoted :: Monad ctx =>
                   LEnvironment ctx ->
-                  Antiquoted NExpr ->
+                  Antiquoted Text NExpr ->
                   Eval ctx Text
 evalAntiquoted env = \case
   Plain string -> pure string
   Antiquoted expr -> evaluate env expr >>= \case
     VString str -> pure str
     v -> expectedString v
+
+-- | Evaluate a KeyName, which must result in 'Text' or it's an error.
+evalKeyName :: Monad ctx =>
+               LEnvironment ctx ->
+               NKeyName NExpr ->
+               Eval ctx Text
+evalKeyName env (DynamicKey antiq) = case antiq of
+  Plain stringExpr -> evalString env stringExpr
+  Antiquoted expr -> evaluate env expr >>= \case
+    VString str -> pure str
+    v -> expectedString v
+evalKeyName _ (StaticKey txt) = pure txt
 
 -- | Data type to represent the state of an attribute set as it's built.
 -- Values of this type are either actual expressions ('Defined'), or they are
@@ -151,16 +164,16 @@ buildInProgressRecord :: Monad ctx =>
                          Eval ctx (Record InProgress)
 buildInProgressRecord env bindings = flip execStateT mempty $
   forM_ bindings $ \case
-    NamedVar keys expr -> do
+    NamedVar (keys :: [NKeyName NExpr]) expr -> do
       -- Convert the key expressions to a list of text.
-      keyPath <- lift $ mapM (evalAntiquoted env) keys
+      keyPath <- lift $ mapM (evalKeyName env) keys
       -- Insert the key into the in-progress set.
       record <- get
       record' <- lift $ insertKeyPathRecord keyPath expr record
       put record'
     Inherit maybeExpr keyNames -> forM_ keyNames $ \keyName -> do
       -- Evaluate the keyName to a string.
-      varName <- lift $ evalAntiquoted env keyName
+      varName <- lift $ evalKeyName env keyName
       -- Create the actual expression.
       let expr = case maybeExpr of
             Nothing -> mkSym varName
@@ -178,10 +191,9 @@ bindingsToEnv :: Monad ctx =>
 bindingsToEnv recursively env bindings = case recursively of
   False -> recordIPToEnv env <$> buildInProgressRecord env bindings
   True -> do
-    rec
-      mergedEnv <- pure $ env `unionEnv` env'
-      env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
-    pure env'
+    -- mergedEnv <- pure $ env `unionEnv` env'
+    -- env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
+    pure emptyE -- env'
 
 evaluate :: Monad m => LEnvironment m -> NExpr -> LazyValue m
 evaluate env (Fix expr) = do
@@ -200,17 +212,18 @@ evaluate env (Fix expr) = do
       evaluate (env `unionEnv` env') expr'
     NSet bindings -> VAttrSet <$> bindingsToEnv False env bindings
     NRecSet bindings -> VAttrSet <$> bindingsToEnv True env bindings
-    NSelect expr' attrPath maybeDefault -> go attrPath $ recur expr' where
-      go [] lval = lval
-      go (keyName:keyNames) lval = lval >>= \case
-        VAttrSet attrs -> do
-          key <- evalAntiquoted env keyName
-          case lookupEnv key attrs of
-            Just lval' -> go keyNames lval'
-            Nothing -> case maybeDefault of
-              Just def -> recur def
-              Nothing -> throwError $ KeyError key $ envKeySet attrs
-        v -> expectedAttrs v
+    NSelect expr' attrPath maybeDefault -> do
+      go attrPath $ recur expr' where
+        go [] lval = lval
+        go (keyName:keyNames) lval = lval >>= \case
+          VAttrSet attrs -> do
+            key <- evalKeyName env keyName
+            case lookupEnv key attrs of
+              Just lval' -> go keyNames lval'
+              Nothing -> case maybeDefault of
+                Just def -> recur def
+                Nothing -> throwError $ KeyError key $ envKeySet attrs
+          v -> expectedAttrs v
     NUnary op innerExpr -> do
       -- Translate the operator into a native function.
       let func = interpretUnop op
