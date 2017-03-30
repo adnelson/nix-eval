@@ -124,11 +124,11 @@ defaultMock = MockState {
 runMock :: Eval TestM a -> IO (Either EvalError a, MockState)
 runMock = flip runStateT defaultMock . run
 
-runMock1 :: Eval TestM a -> IO (Either EvalError a)
-runMock1 = map fst . runMock
+runMockGetResult :: Eval TestM a -> IO (Either EvalError a)
+runMockGetResult = map fst . runMock
 
-runMock2 :: Eval TestM a -> IO MockState
-runMock2 = map snd . runMock
+runMockGetState :: Eval TestM a -> IO MockState
+runMockGetState = map snd . runMock
 
 runStrict :: WHNFValue -> IO (Either EvalError StrictValue, MockState)
 runStrict = runMock . whnfToStrict
@@ -184,31 +184,31 @@ runNativeStrictL2 = map snd . runNativeStrictL
 
 shouldEvalTo :: NExpr -> StrictValue -> Expectation
 shouldEvalTo expr val = do
-  result <- runMock1 $ lazyToStrict $ performEval expr
-  result `shouldBe` pure val
+  result <- runMockGetResult $ lazyToStrict $ performEval expr
+  result `shouldBe` Right val
 
 shouldEvalToWithEnv :: LEnvironment -> NExpr -> StrictValue -> Expectation
 shouldEvalToWithEnv env expr val = do
-  result <- runMock1 $ lazyToStrict $ evaluate env expr
-  result `shouldBe` pure val
+  result <- runMockGetResult $ lazyToStrict $ evaluate env expr
+  result `shouldBe` Right val
 
 shouldBeError :: LazyValue -> Expectation
 shouldBeError action = do
-  res <- runMock1 $ lazyToStrict action
+  res <- runMockGetResult $ lazyToStrict action
   shouldSatisfy res $ \case
     Left _ -> True
     _ -> False
 
 shouldBeNameError :: LazyValue -> Expectation
 shouldBeNameError action = do
-  res <- runMock1 $ lazyToStrict action
+  res <- runMockGetResult $ lazyToStrict action
   shouldSatisfy res $ \case
     Left (NameError _ _) -> True
     _ -> False
 
 shouldBeErrorWith :: LazyValue -> [String] -> Expectation
 shouldBeErrorWith action strings = do
-  res <- runMock1 $ lazyToStrict action
+  res <- runMockGetResult $ lazyToStrict action
   shouldSatisfy res $ \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False
@@ -223,14 +223,14 @@ succeedingExpression = mkStr "success"
 
 shouldBeValid :: Show a => Eval TestM a -> Expectation
 shouldBeValid action = do
-  res <- runMock1 action
+  res <- runMockGetResult action
   shouldSatisfy res $ \case
     Left _ -> False
     _ -> True
 
 shouldErrorWithEnv :: LEnvironment -> NExpr -> [String] -> Expectation
 shouldErrorWithEnv env expr strings = do
-  res <- runMock1 $ lazyToStrict $ evaluate env expr
+  res <- runMockGetResult $ lazyToStrict $ evaluate env expr
   res `shouldSatisfy` \case
     Left err -> all (`isInfixOf` show err) strings
     _ -> False

@@ -202,6 +202,39 @@ buildInProgressRecord env bindings = flip execStateT mempty $
 
 -- | Convert a list of bindings to an environment. The bindings can optionally
 -- be recursive, meaning that one binding in the list can refer to another.
+-- This introduces an interesting challenge: the values of the
+-- bindings are lazy; e.g. they are expressions coupled with an
+-- environment. The environment they are with is the very environment
+-- that we are building. So for example consider the following nix expression:
+--
+--
+-- rec {x = 1; y = x;}
+--
+-- The key `y` points at the expression `x`, which is a variable. Because the
+-- set is recursive, when evaluating `y`, the definition of `x` (i.e. 1) must
+-- be in the evaluation environment. However, this is the *very same
+-- environment* that this function is attempting to produce, leading
+-- to what seems like an infinite loop: in order to evaluate the set,
+-- we must define the value of `y` in the set, and in order to define
+-- the value of `y`, we must define the set.
+--
+-- This looping is why we need the `MonadFix` constraint in the `Nix`
+-- type. The idea is thus. Imagine I had a reference to the resulting
+-- environment, even though it hasn't actually been defined yet. Then
+-- I could use that environment to define the values inside of it,
+-- even though the end result would be self-referential. `MonadFix`
+-- provides a function with this character:
+--
+-- class Monad m => MonadFix m where
+--   mfix :: (a -> m a) -> m a
+--
+-- The argument to `mfix` is a function which takes the
+-- self-referential argument (the environment, in this case). Since
+-- it's a function, it voids the responsibility to actually *produce*
+-- the environment. The output of the function, the `m a`, is
+-- responsible for this. Then the result of `mfix` is a nice,
+-- well-behaved `m a`, which represents the resulting (and possibly
+-- self-referential) value.
 bindingsToEnv :: Nix ctx =>
                  Bool ->
                  LEnvironment ctx ->
@@ -209,10 +242,10 @@ bindingsToEnv :: Nix ctx =>
                  Eval ctx (LEnvironment ctx)
 bindingsToEnv recursively env bindings = case recursively of
   False -> recordIPToEnv env <$> buildInProgressRecord env bindings
-  True -> do
+  True -> do -- mfix $ \resultEnv -> do
     rec
       mergedEnv <- pure $ env `unionEnv` env'
-      env' <- recordIPToEnv env <$> buildInProgressRecord mergedEnv bindings
+      env' <- recordIPToEnv mergedEnv <$> buildInProgressRecord mergedEnv bindings
     pure env'
 
 -- | Evaluates an arbitrary expression, in an arbitrary context,
