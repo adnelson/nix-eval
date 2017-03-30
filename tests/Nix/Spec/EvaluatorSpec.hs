@@ -269,7 +269,6 @@ letSpec = describe "let conversion" $ do
   it "should let variables reference each other" $ do
     property $ \constant -> do
       -- let x = <constant>; let y = x; in y
-      pendingWith "broken :("
       let expr = letsE [("x", fromAtom constant),
                         ("y", "x")] "y"
       expr `shouldEvalTo` fromAtom constant

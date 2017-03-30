@@ -5,7 +5,7 @@ import Nix.Expr (NBinaryOp(..), NUnaryOp(..))
 import Nix.Values.Generic
 import Nix.Values.Lazy
 import Nix.Values.NativeConversion
-import Nix.Evaluator.Contexts (WriteMessage(..))
+import Nix.Evaluator.Contexts (Nix)
 import Nix.Evaluator.Errors (EvalError(..), FatalError(NotImplemented))
 import Nix.Evaluator.Builtins.Operators
 import Nix.Evaluator.Builtins.NativeFunctions
@@ -16,7 +16,7 @@ notImplemented :: Monad m => Text -> LazyValue m
 notImplemented = throwError . FatalError . NotImplemented
 
 -- | The `builtins` object.
-builtins :: (WriteMessage m, MonadFix m) => LAttrSet m
+builtins :: Nix m => LAttrSet m
 builtins = mkEnvL
   [ ("add", pNativeV $ interpretBinop NPlus)
   , ("all", notImplemented "all")
@@ -71,7 +71,7 @@ builtins = mkEnvL
   ]
 
 -- | The set of objects which should appear at top-level.
-topLevelBuiltins :: (WriteMessage m, MonadFix m) => LAttrSet m
+topLevelBuiltins :: Nix m => LAttrSet m
 topLevelBuiltins = mkEnvL
   [ ("abort", notImplemented "abort")
   , ("baseNameOf", notImplemented "baseNameOf")

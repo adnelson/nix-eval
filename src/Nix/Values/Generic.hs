@@ -147,7 +147,7 @@ instance Extract m => Eq (Environment m) where
   Environment e1 == Environment e2 = map extract e1 == map extract e2
 
 -- | We can show an environment purely if the context implements extract.
-instance (Extract ctx) => Show (Environment ctx) where
+instance Extract ctx => Show (Environment ctx) where
   show (Environment env) = "{" <> items <> "}" where
     showPair (n, v) = unpack n <> " = " <> show (extract v)
     items = intercalate "; " $ map showPair $ H.toList env

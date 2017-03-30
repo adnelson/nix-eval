@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 -- | Abstract evaluation contexts
 -- Not every monad can act as an evaluation context for Nix
 -- expressions. In particular, there are certain primitive
@@ -6,6 +7,8 @@
 -- So we have a more specialized type class here, which is actually
 -- made up of a few more specific type classes.
 module Nix.Evaluator.Contexts where
+
+import Control.Monad.Fix (MonadFix)
 
 import Nix.Common
 import Nix.Evaluator.Errors
@@ -16,6 +19,10 @@ class Monad m => WriteMessage m where
   -- | Write a message (e.g. to stdout)
   writeMessage :: Text -> m ()
 
--- | This class doesn't express any of its own methods; rather it just
--- wraps several other type classes into one.
-class (WriteMessage m) => Nix m
+-- | The instance for IO is just printing to stdout.
+instance WriteMessage IO where
+  writeMessage = putStrLn
+
+-- | Combination of all of the different type classes that a type must
+-- satisfy in order to be able to evaluate nix expressions.
+type Nix m = (WriteMessage m, MonadFix m)
